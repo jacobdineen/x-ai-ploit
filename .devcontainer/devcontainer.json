@@ -8,5 +8,15 @@
   "runArgs": [
     "-p",
     "8000:8000"
-  ]
+  ],
+  "extensions": [
+	"njpwerner.autodocstring",
+	"ms-vscode.cpptools",
+	"ms-azuretools.vscode-docker",
+	"redhat.vscode-yaml",
+	"dbaeumer.vscode-eslint",
+	"esbenp.prettier-vscode",
+	"yzhang.markdown-all-in-one",
+	"shd101wyy.markdown-preview-enhanced"
+]
 }
