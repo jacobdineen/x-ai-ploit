@@ -1,7 +1,7 @@
 {
-  "name": "Python 3",
+  "name": "xaiploit",
   "build": {
-    "dockerfile": "Dockerfile",
+    "dockerfile": "../Dockerfile",
     "context": ".."
   },
   "workspaceFolder": "/app",
