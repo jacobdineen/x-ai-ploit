@@ -1,7 +1,7 @@
 #!/bin/sh
 # ./deploy_docker_container.sh v1.0.0
 # Set the image name (you can customize this)
-IMAGE_NAME="homecams"
+IMAGE_NAME="xaiploit"
 # Set the container name
 CONTAINER_NAME="test"
 
