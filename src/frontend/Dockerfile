@@ -2,7 +2,7 @@
 FROM node:14
 
 # Set working directory
-WORKDIR /app
+WORKDIR /app/src/frontend
 
 # Copy package.json and install dependencies
 COPY package.json .

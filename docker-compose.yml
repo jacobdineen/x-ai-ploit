@@ -7,4 +7,4 @@ services:
   backend:
     build: ./src/backend
     ports:
-      - "8000:8000"
+      - "3001:3001"
