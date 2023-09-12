@@ -2,18 +2,11 @@
   "name": "Python 3",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "..",
-    "dockerComposeFile": "../docker-compose.yml"
+    "context": ".."
   },
-  "service": "app",
   "workspaceFolder": "/app",
-  "settings": {
-    "python.pythonPath": "/usr/local/bin/python",
-    "python.linting.pylintEnabled": false,
-    "python.linting.flake8Enabled": true,
-    "python.linting.enabled": true,
-    "python.format.sortImports": true,
-    "python.analysis.autoSearchPaths": true,
-    "python.analysis.useLibraryCodeForTypes": true
-  }
+  "runArgs": [
+    "-p",
+    "8000:8000"
+  ]
 }
