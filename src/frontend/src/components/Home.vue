@@ -1,101 +1,90 @@
 <template>
-    <div id="app">
-      <div class="header">
-        <div class="container">
-          <nav>
-            <router-link to="/">Home</router-link>
-            <router-link to="/another">Another Page</router-link>
-          </nav>
-        </div>
+    <div class="container">
+      <div v-if="showIntro">
+        <section id="introduction" class="fall">
+          <h1>
+            <span :class="{'color-emph': emph[0]}">X</span>(<span :class="{'color-emph': emph[1]}">A</span><span :class="{'color-emph': emph[2]}">I</span>)<span :class="{'color-emph': emph[3]}">P</span><span :class="{'color-emph': emph[4]}">L</span><span :class="{'color-emph': emph[5]}">O</span><span :class="{'color-emph': emph[6]}">I</span><span :class="{'color-emph': emph[7]}">T</span>
+            : e<span :class="{'color-emph': emph[0]}">X</span>plainable 
+            <span :class="{'color-emph': emph[1]}">A</span><span :class="{'color-emph': emph[2]}">I</span> for 
+            ex<span :class="{'color-emph': emph[3]}">P</span><span :class="{'color-emph': emph[4]}">L</span><span :class="{'color-emph': emph[5]}">O</span><span :class="{'color-emph': emph[6]}">I</span><span :class="{'color-emph': emph[7]}">T</span> Prediction
+          </h1>
+        </section>
       </div>
-      <router-view></router-view>
+      <div v-if="showSefcom">
+        <section id="sefcom" class="fall">
+          <img src="@/assets/SEFCOM.png" alt="SEFCOM" class="sefcom-logo" />
+        </section>
+      </div>
     </div>
   </template>
   
-  
   <script>
-  import axios from 'axios';
-  
   export default {
     data() {
       return {
-        message: 'Fetching data...'
+        showIntro: false,
+        showSefcom: false,
+        emph: new Array(8).fill(false)
       };
     },
-    created() {
-      axios.get('http://localhost:3001/api/message', {
-        headers: {
-          'Content-Type': 'application/json'
+    mounted() {
+      setTimeout(() => {
+        this.showIntro = true;
+        let delay = 2000;  // Increased from 1000 to 2000 for slower start
+        for (let i = 0; i < this.emph.length; i++) {
+          setTimeout(() => {
+            this.$set(this.emph, i, true);
+          }, delay);
+          delay += 400;  // Increased from 200 to 400 for slower emphasis
         }
-      })
-      .then(response => {
-        this.message = response.data.message;
-      })
-      .catch(error => {
-        console.error('An error occurred while fetching data.');
-        console.error('Complete Error Object: ', error);
-        this.message = 'An error occurred while fetching data.';
-      });
+      }, 400);  // You can adjust this as well
+  
+      setTimeout(() => {
+        this.showSefcom = true;
+      }, 800);  // You can adjust this as well
     }
   }
   </script>
-  
-  <style>
-  /* General Layout */
-  #app {
-    font-family: 'Nunito', sans-serif;
-    background-color: #fafafa;
-    height: 100vh;
+
+  <style scoped>
+  .fall {
+    animation: fallAnimation 1s ease forwards;
+    transform: translateY(-200vh);
+    opacity: 0;
   }
   
-  .container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
+    .fade-enter-active, .fade-leave-active {
+    transition: opacity 1s;
+  }
+  .fade-enter, .fade-leave-to {
+    opacity: 0;
+  }
+
+  
+  .sefcom-logo {
+    width: 200px;
+    height: auto;
   }
   
-  /* Title Styles */
-  .title {
-    font-size: 3.5rem;
-    color: #3498db;
+  .color-emph {
+    color: #007bff; /* Pick any color you prefer */
+  }
+
+  .emph {
+    font-size: 1.5em;
+    font-weight: bold;
+  }
+
+  .less-emph {
+    font-size: 1.2em;
+    font-weight: semi-bold;
   }
   
-  /* Animated Title */
-  .animated-title {
-    animation: popIn 1s ease forwards;
+  @keyframes fallAnimation {
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
-  
-  /* Message Box Styles */
-  .message-box {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  }
-  
-  /* Message Styles */
-  .message {
-    font-size: 1.5rem;
-    color: #333;
-    text-align: center;
-  }
-  
-  /* Animated Message */
-  .animated-message {
-    animation: fadeIn 2s ease forwards;
-  }
-  
-  /* Animations */
-  @keyframes popIn {
-    0% { transform: scale(0); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-  
-  @keyframes fadeIn {
-    0% { opacity: 0; }
-    100% { opacity: 1; }
-  }
+}
   </style>
   

@@ -1,7 +1,8 @@
 import Vue from 'vue'
 import Router from 'vue-router'
+import XAI from '../components/Xai.vue'
 import Home from '../components/Home.vue'
-const DEFAULT_TITLE = 'OSS Data Explorer';
+const DEFAULT_TITLE = 'xaiploit';
 
 Vue.use(Router)
 
@@ -13,6 +14,11 @@ const router = new Router({
       path: "/",
       name: "Home",
       component: Home,
+    },
+    {
+      path: '/explain',
+      name: 'Explain',
+      component: XAI,
     },
   ],
 });
