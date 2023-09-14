@@ -10,7 +10,11 @@
           <b-nav-item>
             <router-link to="/explain" class="nav-link explain">Explain</router-link>
           </b-nav-item>
+          <b-nav-item>
+          <router-link to="/faqs" class="nav-link">FAQs</router-link>
+        </b-nav-item>
         </b-navbar-nav>
+        
         <b-navbar-nav class="ml-auto">  <!-- Push content to the far right -->
           <b-nav-item>
             <img src="@/assets/SEFCOM.png" alt="SEFCOM" class="sefcom-logo"/>
@@ -20,15 +24,19 @@
     </b-navbar>
     <router-view></router-view>
     <footer class="site-footer">
-      <div>An initiative by the Laboratory of Security Engineering for Future Computing (SEFCOM).</div>
-      <div>For inquiries contact: <a href="mailto:jdineen@asu.edu">jdineen@asu.edu</a></div>
-    </footer>
+  <div class="footer-content">
+    <div>An initiative by the Laboratory of Security Engineering for Future Computing (SEFCOM).</div>
+    <div>For inquiries contact: <a href="mailto:jdineen@asu.edu">jdineen@asu.edu</a></div>
+  </div>
+</footer>
+
   </div>
 </template>
 
 
 <script>
 export default {
+  
   name: 'App',
 }
 </script>
@@ -40,14 +48,30 @@ router-view {
 }
 
 .site-footer {
-  background-color: #333;
-  color: #fff;
-  text-align: center;
-  padding: 1em;
-  position: fixed;
-  bottom: 0;
-  width: 100%;
+  background-color: #2c3e50; /* dark blue-grey */
+  color: #ecf0f1; /* off-white */
+  padding: 10px 0; /* top-bottom padding */
+  font-size: 14px; /* smaller text */
 }
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 20px; /* left-right padding */
+}
+
+.site-footer a {
+  color: #3498db; /* brighter blue */
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
 
 .sefcom-logo {
     width: 100px;  /* You can adjust the dimensions as needed */

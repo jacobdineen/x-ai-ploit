@@ -10,7 +10,7 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm install
-
+RUN npm install --save vue-good-table
 
 # Copy all files
 COPY . .

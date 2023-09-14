@@ -47,6 +47,14 @@
   </script>
 
   <style scoped>
+  .container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh; /* 100% of the viewport height */
+  width: 100vw; /* 100% of the viewport width */
+}
   .fall {
     animation: fallAnimation 1s ease forwards;
     transform: translateY(-200vh);
