@@ -1,15 +1,16 @@
 version: '3'
 services:
   frontend:
-    build:
-      context: ./src/frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_BACKEND_URL=http://backend:3001
-
+    build: ./src/frontend
+    ports: ["3000:3000"]
+    networks:
+      - custom_network
   backend:
-    build:
-      context: ./src/backend
-    ports:
-      - "3001:3001"
+    build: ./src/backend
+    ports: ["3001:3001"]
+    networks:
+      - custom_network
+
+networks:
+  custom_network:
+    driver: bridge
