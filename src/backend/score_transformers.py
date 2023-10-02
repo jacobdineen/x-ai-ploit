@@ -26,7 +26,6 @@ def main():
 
     # Load the data
     data = pd.read_csv("data.csv")
-    data = data[:100]
     data['comments'] = data['comments'].apply(lambda x: ' '.join(eval(x)))
     logging.info("data loaded")
 

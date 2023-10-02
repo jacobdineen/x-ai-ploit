@@ -12,14 +12,16 @@ import shap
 import re
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import ast
+import io
+import base64
 
-def truncate_text(text, max_chars=500):
+def truncate_text(text, max_chars=1028):
     return text[:max_chars]
 
 def preprocess_comment(comment):
     comment_list = ast.literal_eval(comment)
     comment = ' '.join(comment_list)
-    comment = re.sub(r'[^a-zA-Z0-9\s]', '', comment)  # Remove all non-alphanumeric characters except spaces
+    comment = re.sub(r'#', '', comment)  # Remove all instances of '#'
     return truncate_text(comment, 500)
 
 logging.basicConfig(level=logging.INFO)
@@ -70,23 +72,52 @@ def explain_prediction():
     cve_id = request.json.get("cve_id")
     hash = request.json.get("hash")
 
-    entry = df[df['cveid'] == cve_id]
-    entry = df[df['hash'] == hash]
-    
+    entry = df[(df['cveid'] == cve_id) & (df['hash'] == hash)]
 
     # entry['comments'] = entry['comments'].apply(lambda x: ' '.join(eval(x)))
+    logging.info(f"entry loaded {entry['comments']}")
     entry['comments'] = entry['comments'].apply(preprocess_comment)
-    logging.info("entry loaded", entry)
-    logging.info(f"length of entry; {len(entry)}")
+    logging.info(f"entry preprocessed {entry['comments']}")
+
+    logging.info(f"length of entry; {len(entry['comments'])}")
     data = pd.DataFrame({'text':entry['comments'],'emotion':entry['exploitability']})
-    shap_values = explainer(data['text'][:1])
-    logging.info("shap values loaded", shap_values)
+    shap_values = explainer(data['text'])
+    logging.info("shap values loaded")
 
     # Generate the SHAP plot and save to an HTML string
-    shap_html = shap.plots.text(shap_values, display=False)
-    # logging.info("shap html loaded", shap_html)
-    # Return the HTML content as the response
-    return jsonify({"shap_plot": shap_html})
+    
+    shap_html_text = shap.plots.text(shap_values, display=False)
+    # Bar SHAP plot
+    fig, ax = plt.subplots(figsize=(8, 10))  # Adjust the height for more space, especially if you have many features
+
+    # Generate the SHAP bar plot
+    shap.plots.bar(shap_values[0, :, 1], order=shap.Explanation.argsort, show=False)
+
+    # Adjust tick label size and orientation for better readability (optional)
+    ax.tick_params(axis='both', which='major', labelsize=10)  # Change '10' to adjust the font size
+    for label in ax.get_xticklabels():
+        label.set_ha("right")  # Horizontal alignment
+        label.set_rotation(45)  # Rotation degree
+
+    # Save the plot to a BytesIO object with a higher resolution
+    buf = io.BytesIO()
+    plt.tight_layout()  # Ensures that all labels fit in the figure
+    plt.savefig(buf, format="png", dpi=300)
+    logging.info("plot saved")
+    plt.close()
+    buf.seek(0)
+
+    # Convert image to data URI
+    image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    shap_html_bar = "data:image/png;base64," + image_base64
+    # logging.info(shap_html_bar)
+    logging.info("shap html loaded")
+
+    # Get the prediction for the comment
+    comment = entry["comments"].values[0]  
+    prediction = pred(comment)
+    
+    return jsonify({"shap_plot_text": shap_html_text, "shap_plot_bar": shap_html_bar, "prediction": prediction})
 
 @app.route('/api/message', methods=['GET'])
 @cross_origin()

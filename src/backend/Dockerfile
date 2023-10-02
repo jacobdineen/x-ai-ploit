@@ -5,7 +5,7 @@ FROM ubuntu:latest
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-setuptools \
+    python3-setuptools 
     # vim \
     # zsh \
     # curl \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     # ucspi-tcp \
     # gdb \
     # netcat && \
-    rm -rf /var/lib/apt/lists/*
+    # rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
