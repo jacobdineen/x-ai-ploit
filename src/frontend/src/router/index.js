@@ -1,6 +1,8 @@
 import Vue from 'vue'
 import Router from 'vue-router'
 import XAI from '../components/Xai.vue'
+import Exploit from '../components/Exploit.vue'
+
 import Home from '../components/Home.vue'
 import FAQs from '../components/FAQs.vue';
 const DEFAULT_TITLE = 'xaiploit';
@@ -15,6 +17,11 @@ const router = new Router({
       path: "/",
       name: "Home",
       component: Home,
+    },
+    {
+      path: "/predictions",
+      name: "ExploitPrediction",
+      component: Exploit,
     },
     {
       path: '/explain',

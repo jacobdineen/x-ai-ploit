@@ -1,5 +1,5 @@
 # Use a Node base image
-FROM node:19
+FROM node:20
 
 # Set working directory
 WORKDIR /app/src/frontend

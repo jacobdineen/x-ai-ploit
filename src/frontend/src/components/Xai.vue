@@ -1,108 +1,147 @@
 <template>
-    <div id="app" class="center-content">
+  <div id="app" class="center-content">
       <div class="container">
-        <div class="message-box" v-if="filteredPapers.length === 0">
-          <div class="message">{{ message }}</div>
+          <!-- CVE ID input and explanation button -->
+          <div class="input-box">
+            <input list="cve_ids" type="text" v-model="cveIdInput" placeholder="Enter CVE ID" />
+            <datalist id="cve_ids">
+              <option v-for="cve_id in suggestions.cve_ids" :value="cve_id" :key="cve_id"></option>
+          </datalist>
+
+
+            <input list="hashes" type="text" v-model="hashInput" placeholder="Enter Hash" />
+            <datalist id="hashes">
+                <option v-for="hash in suggestions.hashes" :value="hash" :key="hash"></option>
+            </datalist>
+            <button @click="fetchExplanation">Generate</button>
+          </div>
+          
+          <div v-if="isLoading" class="progress-container">
+            <div class="progress-bar" :style="{width: progress + '%'}"></div>
+            <span class="progress-message">Generating explanations, hang tight...</span>
         </div>
-        <div class="search-box">
-          <input type="text" v-model="searchTerm" @input="filterCandidates" placeholder="Search by Paper ID" />
-          <ul v-if="candidates.length > 0" class="suggestions">
-            <li v-for="candidate in candidates" :key="candidate" @click="selectCandidate(candidate)">
-              {{ candidate }}
-            </li>
-          </ul>
-        </div>
-        <vue-good-table
-          v-if="filteredPapers.length > 0"
-          :columns="columns"
-          :rows="filteredPapers"
-          :pagination-options="{ enabled: true, mode: 'pages' }"
-          :sort-options="{ enabled: true }"
-        >
-        </vue-good-table>
+
+          <!-- SHAP Values Display Container -->
+          <iframe id="shapPlotFrame" style="width:100%; height:400px; border:1px solid red;"></iframe>
+          <!-- SHAP Values Image Display (optional, if you still want to display the image) -->
+          <div>
+              <img :src="'data:image/png;base64,' + shapImage" alt="SHAP Visualization" />
+          </div>
       </div>
-    </div>
-  </template>
-  
-  
-  <script>
+  </div>
+</template>
+
+<script>
 import axios from 'axios';
-import { VueGoodTable } from 'vue-good-table';
 
 export default {
-  components: {
-    VueGoodTable,
-  },
   data() {
     return {
-      message: 'Fetching data...',
-      papers: [],
-      searchTerm: '',
-      candidates: [],
-      columns: [
-        { label: 'Paper ID', field: 'paper_id', sortable: true },
-        { label: 'Title', field: 'title', sortable: true },
-        { label: 'Abstract', field: 'abstract', sortable: false },
-      ],
+        cveIdInput: 'cve-2013-6234',  // Default value
+        hashInput: '3cbdafc2a8811dbc3e6ee66bdc29ef72719e0a1e298017f3852bbdc54219b41e',  // Default value
+        suggestions: {
+            cve_ids: [],
+            hashes: []
+        },
+        isLoading: false,
+        progress: 0
     };
+},
+
+created() {
+    this.fetchSuggestions();
+},
+
+watch: {
+    cveIdInput(newCveId) {
+      this.fetchHashesForCVE(newCveId);
+    }
   },
-  computed: {
-    filteredPapers() {
-      return this.papers.filter(paper => paper.paper_id.toLowerCase().includes(this.searchTerm.toLowerCase()));
-    },
-  },
+
+
   methods: {
-    filterCandidates() {
-      this.candidates = this.papers
-        .map(paper => paper.paper_id)
-        .filter(id => id.toLowerCase().includes(this.searchTerm.toLowerCase()))
-        .slice(0, 5); // Limit number of suggestions
+    startProgressBar() {
+        this.progress = 0;
+        const interval = setInterval(() => {
+            this.progress += 1;
+            if (this.progress >= 100) {
+                clearInterval(interval);
+                this.isLoading = false;
+            }
+        }, 600); // This will increment the progress by 1% every 600ms for 60 seconds
     },
-    selectCandidate(candidate) {
-      this.searchTerm = candidate;
-      this.candidates = [];
+
+    fetchHashesForCVE(cve_id) {
+      axios.post('http://localhost:3001/api/get_hashes_for_cve', { cve_id: cve_id })
+        .then(response => {
+            this.suggestions.hashes = response.data.hashes;
+        })
+        .catch(error => {
+            console.error("Error fetching hashes for CVE:", error);
+        });
     },
-  },
-  created() {
-    axios.get('http://localhost:3001/api/message', {
-      headers: {
-        'Content-Type': 'application/json',
-      },
+
+    fetchSuggestions() {
+        axios.get('http://localhost:3001/api/get_suggestions')
+            .then(response => {
+                this.suggestions = response.data;
+            })
+            .catch(error => {
+                console.error("Error fetching suggestions:", error);
+            });
+    },
+
+    fetchExplanation() {
+    this.startProgressBar(); // Start the progress bar
+    this.isLoading = true; // Set isLoading to true to show the progress bar
+
+    axios.post('http://localhost:3001/api/explain', { 
+        cve_id: this.cveIdInput, 
+        hash: this.hashInput
     })
     .then(response => {
-      this.papers = response.data;
-      if (this.papers.length === 0) {
-        this.message = 'No papers found.';
-      }
+        const iframe = document.getElementById('shapPlotFrame');
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(response.data.shap_plot);
+        doc.close();
+
+        this.isLoading = false; // Set isLoading back to false once done
     })
     .catch(error => {
-      console.error('An error occurred while fetching data:', error);
-      this.message = 'An error occurred while fetching data.';
+        console.error("Error fetching SHAP values:", error);
+        this.isLoading = false; // Set isLoading to false even on error
     });
-  },
-};
+}
+
+  }
+}
 </script>
 
-  
-
 <style>
+.progress-container {
+    position: relative;
+    width: 100%;
+    background-color: #f3f3f3;
+    margin-top: 15px;
+    height: 20px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.6s ease;
+}
+
 .center-content {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
 }
-.search-box {
-  position: relative;
-}
-.suggestions {
-  position: absolute;
-  width: 100%;
-  border: 1px solid #ccc;
-  background: #fff;
-  z-index: 1;
-  list-style-type: none;
-  margin: 0;
-  padding: 0;
+.input-box {
+  margin-bottom: 20px;
 }
 </style>

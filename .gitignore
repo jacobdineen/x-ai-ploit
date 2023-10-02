@@ -1,2 +1,11 @@
 frontend/build
 .pytest_cache
+
+*.csv
+*.json
+*.pkl
+*.html
+*.bin
+
+*.pyc
+/__pycache__/
