@@ -21,12 +21,22 @@
             <span class="progress-message">Generating explanations, hang tight...</span>
         </div>
 
-          <!-- SHAP Values Display Container -->
-          <iframe id="shapPlotFrame" style="width:100%; height:400px; border:1px solid red;"></iframe>
-          <!-- SHAP Values Image Display (optional, if you still want to display the image) -->
-          <div>
-              <img :src="'data:image/png;base64,' + shapImage" alt="SHAP Visualization" />
-          </div>
+        <div class="plots-container">
+            <!-- Existing SHAP Text Plot Display -->
+            <iframe id="shapPlotFrameText" class="plot-frame" style="border:1px solid red;"></iframe>
+
+            <!-- New SHAP Bar Plot Display -->
+            <img :src="shapPlotBarImage" class="plot-frame" style="border:1px solid blue;" />
+        </div>
+
+        <div v-if="exploitNotLikelyScore">
+          P(exploitability = 0) = {{ exploitNotLikelyScore }}
+      </div>
+      <div v-if="exploitLikelyScore">
+          P(exploitability = 1) = {{ exploitLikelyScore }}
+      </div>
+
+ 
       </div>
   </div>
 </template>
@@ -37,14 +47,17 @@ import axios from 'axios';
 export default {
   data() {
     return {
-        cveIdInput: 'cve-2013-6234',  // Default value
-        hashInput: '3cbdafc2a8811dbc3e6ee66bdc29ef72719e0a1e298017f3852bbdc54219b41e',  // Default value
+        cveIdInput: 'cve-2015-8103',  // Default value
+        hashInput: '5b4fbac60182b69e9a0417ea726276c87c101335d6fbdc5e8c9a9a429235c655',  // Default value
         suggestions: {
             cve_ids: [],
             hashes: []
         },
         isLoading: false,
-        progress: 0
+        progress: 0,
+        shapPlotBarImage: null, // Add this line
+        exploitNotLikelyScore: 0,
+        exploitLikelyScore: 0,
     };
 },
 
@@ -68,11 +81,11 @@ watch: {
                 clearInterval(interval);
                 this.isLoading = false;
             }
-        }, 600); // This will increment the progress by 1% every 600ms for 60 seconds
+        }, 900); // This will increment the progress by 1% every 600ms for 60 seconds
     },
 
     fetchHashesForCVE(cve_id) {
-      axios.post('http://localhost:3001/api/get_hashes_for_cve', { cve_id: cve_id })
+        axios.post('http://localhost:3001/api/get_hashes_for_cve', { cve_id: cve_id })
         .then(response => {
             this.suggestions.hashes = response.data.hashes;
         })
@@ -83,42 +96,77 @@ watch: {
 
     fetchSuggestions() {
         axios.get('http://localhost:3001/api/get_suggestions')
-            .then(response => {
-                this.suggestions = response.data;
-            })
-            .catch(error => {
-                console.error("Error fetching suggestions:", error);
-            });
+        .then(response => {
+            this.suggestions = response.data;
+        })
+        .catch(error => {
+            console.error("Error fetching suggestions:", error);
+        });
     },
 
-    fetchExplanation() {
-    this.startProgressBar(); // Start the progress bar
-    this.isLoading = true; // Set isLoading to true to show the progress bar
+      fetchExplanation() {
+      this.startProgressBar();
+      this.isLoading = true;
 
-    axios.post('http://localhost:3001/api/explain', { 
-        cve_id: this.cveIdInput, 
-        hash: this.hashInput
-    })
-    .then(response => {
-        const iframe = document.getElementById('shapPlotFrame');
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open();
-        doc.write(response.data.shap_plot);
-        doc.close();
+      axios.post('http://localhost:3001/api/explain', { 
+          cve_id: this.cveIdInput, 
+          hash: this.hashInput
+      })
+      .then(response => {
+          const iframeText = document.getElementById('shapPlotFrameText');
+          const docText = iframeText.contentDocument || iframeText.contentWindow.document;
+          docText.open();
+          docText.write(response.data.shap_plot_text);
+          docText.close();
 
-        this.isLoading = false; // Set isLoading back to false once done
-    })
-    .catch(error => {
-        console.error("Error fetching SHAP values:", error);
-        this.isLoading = false; // Set isLoading to false even on error
-    });
-}
+          this.shapPlotBarImage = response.data.shap_plot_bar;
 
+          // Check if "preds" exists, is an array, and contains at least one item
+          const preds = response.data.preds;
+          if (preds && Array.isArray(preds) && preds.length > 0 && preds[0]) {
+              preds[0].forEach(pred => {
+                  if (pred.label === 'exploit_not_likely') {
+                      this.exploitNotLikelyScore = pred.score;
+                  } else if (pred.label === 'exploit_likely') {
+                      this.exploitLikelyScore = pred.score;
+                  }
+              });
+          }
+      })
+      .catch(error => {
+          console.error("Error fetching SHAP values:", error);
+      });
   }
+}
 }
 </script>
 
 <style>
+/* Styles for the plots container */
+.plots-container {
+    display: flex;
+    justify-content: flex-start; /* Ensures horizontal centering */
+    align-items: left; /* Ensures vertical centering */
+    flex-wrap: nowrap;
+    width: 160%; /* Change this from 150% to 100% */
+}
+
+.plot-frame {
+    flex: 1; 
+    width: calc(50% - 10px); /* Adjusting for a 10px gap between plots. 50% since there are 2 plots */
+    height: 400px;
+    margin: 0 5px;
+}
+
+/* If the input boxes are getting obscured, ensure their container has a higher z-index */
+.input-box {
+    margin-bottom: 20px;
+    z-index: 10;
+    position: relative;
+}
+
+
+
 .progress-container {
     position: relative;
     width: 100%;

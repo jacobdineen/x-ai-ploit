@@ -6,6 +6,8 @@ frontend/build
 *.pkl
 *.html
 *.bin
+*.png
+*.svg
 
 *.pyc
 /__pycache__/
