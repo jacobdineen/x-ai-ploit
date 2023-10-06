@@ -6,4 +6,5 @@ For dev work:
 pre-commit install
 ```
 
-# starting backend
+# starting
+`docker-compose down && docker-compose build && docker-compose up --build -d`
