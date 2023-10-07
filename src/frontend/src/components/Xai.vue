@@ -3,19 +3,20 @@
       <div class="container">
           <!-- CVE ID input and explanation button -->
           <div class="input-box">
+          <label for="cve-id-input">Enter CVE ID:</label>
             <input list="cve_ids" type="text" v-model="cveIdInput" placeholder="Enter CVE ID" />
             <datalist id="cve_ids">
               <option v-for="cve_id in suggestions.cve_ids" :value="cve_id" :key="cve_id"></option>
           </datalist>
 
-
+            <label for="hash-input">Enter Hash:</label>
             <input list="hashes" type="text" v-model="hashInput" placeholder="Enter Hash" />
             <datalist id="hashes">
                 <option v-for="hash in suggestions.hashes" :value="hash" :key="hash"></option>
             </datalist>
             <button @click="fetchExplanation">Generate</button>
           </div>
-          
+
           <div v-if="isLoading" class="progress-container">
             <div class="progress-bar" :style="{width: progress + '%'}"></div>
             <span class="progress-message">Generating explanations, hang tight...</span>
@@ -36,7 +37,7 @@
           P(exploitability = 1) = {{ exploitLikelyScore }}
       </div>
 
- 
+
       </div>
   </div>
 </template>
@@ -108,8 +109,8 @@ watch: {
       this.startProgressBar();
       this.isLoading = true;
 
-      axios.post('http://localhost:3001/api/explain', { 
-          cve_id: this.cveIdInput, 
+      axios.post('http://localhost:3001/api/explain', {
+          cve_id: this.cveIdInput,
           hash: this.hashInput
       })
       .then(response => {
@@ -144,18 +145,19 @@ watch: {
 <style>
 /* Styles for the plots container */
 .plots-container {
-    display: flex;
-    justify-content: flex-start; /* Ensures horizontal centering */
-    align-items: left; /* Ensures vertical centering */
-    flex-wrap: nowrap;
-    width: 160%; /* Change this from 150% to 100% */
+    flex-direction: column;  /* Stack children vertically */
+    width: 100%;             /* Take up the full width of its container */
 }
 
 .plot-frame {
-    flex: 1; 
-    width: calc(50% - 10px); /* Adjusting for a 10px gap between plots. 50% since there are 2 plots */
-    height: 400px;
-    margin: 0 5px;
+    width: 100%;    /* Take up the full width of its container */
+    height: 400px;  /* Define a specific height for consistency */
+    margin: 5px 0;  /* Add some vertical margin for spacing between plots */
+}
+
+.plot-frame img {
+    max-width: 100%;  /* This ensures the image doesn't overflow its container */
+    height: auto;     /* This keeps the aspect ratio of the image */
 }
 
 /* If the input boxes are getting obscured, ensure their container has a higher z-index */
@@ -184,10 +186,10 @@ watch: {
 }
 
 .center-content {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+  display: block; /* Use block instead of flex for natural flow */
+  width: 100%; /* Ensure it takes the full width */
+  min-height: 100vh; /* Optional: if you want it to be at least the height of the viewport */
+  padding: 20px; /* Optional: if you want some spacing around */
 }
 .input-box {
   margin-bottom: 20px;
