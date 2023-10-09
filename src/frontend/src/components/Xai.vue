@@ -82,7 +82,7 @@ watch: {
                 clearInterval(interval);
                 this.isLoading = false;
             }
-        }, 900); // This will increment the progress by 1% every 600ms for 60 seconds
+        }, 300); // This will increment the progress by 1% every 600ms for 60 seconds
     },
 
     fetchHashesForCVE(cve_id) {

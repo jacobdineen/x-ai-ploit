@@ -136,10 +136,7 @@ def merge_dataframes_on_column(df1: pd.DataFrame, df2: pd.DataFrame, column_name
 
     merged_df = df1.merge(df2, on=column_name, how="inner")
 
-    if merged_df.empty:
-        return pd.DataFrame()
-    else:
-        return merged_df
+    return merged_df if not merged_df.empty else pd.DataFrame()
 
 
 @timer
@@ -165,6 +162,7 @@ def filter_and_load_json(directory: str) -> pd.DataFrame:
             with open(filepath, "r") as f:
                 for line in f:
                     data = json.loads(line)
+                    label = False
                     source = data.get("source", "").lower()
                     if "xforce" in source:
                         label = data.get("exploitability", None)
@@ -274,9 +272,9 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
 
 
 if __name__ == "__main__":
-    exploit_data_directory = "/Documents/copy20221006/files/train_19700101_20210401/exploits_text"
-    documents_path = "/Documents/copy20221006/files/train_19700101_20210401/documents.json"
-    labels_directory = "/Documents/copy20221006/documents/train_19700101_20210401"
+    exploit_data_directory = "data/copy20221006/files/train_19700101_20210401/exploits_text"
+    documents_path = "data/copy20221006/files/train_19700101_20210401/documents.json"
+    labels_directory = "data/copy20221006/documents/train_19700101_20210401"
     export_path = "final_merged_df"
     main(
         exploit_data_directory=exploit_data_directory,

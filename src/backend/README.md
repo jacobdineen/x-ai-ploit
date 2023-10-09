@@ -6,7 +6,7 @@ python main.py generate-features
 
 
 ```python
-# Run the following command to train the model  
+# Run the following command to train the model
 python main.py train-model
 
 ```

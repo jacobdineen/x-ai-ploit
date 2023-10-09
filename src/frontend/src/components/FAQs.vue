@@ -11,7 +11,7 @@
       </div>
     </div>
   </template>
-  
+
   <script>
   export default {
     data() {
@@ -56,7 +56,7 @@
     }
   };
   </script>
-  
+
   <style scoped>
   .faqs {
   display: flex;
@@ -94,4 +94,3 @@
   line-height: 1.6; /* Adjust line height */
 }
   </style>
-  
