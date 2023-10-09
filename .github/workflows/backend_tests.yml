@@ -1,31 +1,14 @@
-name: Backend Tests
+name: Test
 
-on:
-  push:
-    paths:
-      - 'src/backend/**'
-  pull_request:
-    paths:
-      - 'src/backend/**'
+on: [push]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-
+    - uses: actions/checkout@v2
     - name: Install dependencies
-      run: |
-        pip install -r src/backend/docker_requirements.txt
-
+      run: npm install
     - name: Run tests
-      run: |
-        cd src/backend
-        python -m unittest discover tests
+      run: npm test
