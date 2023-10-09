@@ -16,3 +16,7 @@ def timer(func):
         return value
 
     return wrapper_timer
+
+
+def add_numbers(a, b):
+    return a + b
