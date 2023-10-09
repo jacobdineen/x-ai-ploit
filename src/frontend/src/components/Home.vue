@@ -4,8 +4,8 @@
         <section id="introduction" class="fall">
           <h1>
             <span :class="{'color-emph': emph[0]}">X</span>(<span :class="{'color-emph': emph[1]}">A</span><span :class="{'color-emph': emph[2]}">I</span>)<span :class="{'color-emph': emph[3]}">P</span><span :class="{'color-emph': emph[4]}">L</span><span :class="{'color-emph': emph[5]}">O</span><span :class="{'color-emph': emph[6]}">I</span><span :class="{'color-emph': emph[7]}">T</span>
-            : e<span :class="{'color-emph': emph[0]}">X</span>plainable 
-            <span :class="{'color-emph': emph[1]}">A</span><span :class="{'color-emph': emph[2]}">I</span> for 
+            : e<span :class="{'color-emph': emph[0]}">X</span>plainable
+            <span :class="{'color-emph': emph[1]}">A</span><span :class="{'color-emph': emph[2]}">I</span> for
             ex<span :class="{'color-emph': emph[3]}">P</span><span :class="{'color-emph': emph[4]}">L</span><span :class="{'color-emph': emph[5]}">O</span><span :class="{'color-emph': emph[6]}">I</span><span :class="{'color-emph': emph[7]}">T</span> Prediction
           </h1>
         </section>
@@ -17,7 +17,7 @@
       </div>
     </div>
   </template>
-  
+
   <script>
   export default {
     data() {
@@ -38,7 +38,7 @@
           delay += 400;  // Increased from 200 to 400 for slower emphasis
         }
       }, 400);  // You can adjust this as well
-  
+
       setTimeout(() => {
         this.showSefcom = true;
       }, 800);  // You can adjust this as well
@@ -60,7 +60,7 @@
     transform: translateY(-200vh);
     opacity: 0;
   }
-  
+
     .fade-enter-active, .fade-leave-active {
     transition: opacity 1s;
   }
@@ -68,12 +68,12 @@
     opacity: 0;
   }
 
-  
+
   .sefcom-logo {
     width: 200px;
     height: auto;
   }
-  
+
   .color-emph {
     color: #007bff; /* Pick any color you prefer */
   }
@@ -87,7 +87,7 @@
     font-size: 1.2em;
     font-weight: semi-bold;
   }
-  
+
   @keyframes fallAnimation {
   to {
     transform: translateY(0);
@@ -95,4 +95,3 @@
   }
 }
   </style>
-  

@@ -1,16 +1,16 @@
+# -*- coding: utf-8 -*-
+import logging
+import pickle
+import warnings
+
 import pandas as pd
 import xgboost as xgb
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import pickle
-import logging
-import warnings
 from sklearn.utils import validation
+from utils import timer
 from xgboost import data as xgboost_data
-from utils import timer 
-
 
 warnings.filterwarnings("ignore", category=FutureWarning, module=validation.__name__)
 warnings.filterwarnings("ignore", category=FutureWarning, module=xgboost_data.__name__)
@@ -18,10 +18,13 @@ warnings.filterwarnings("ignore", category=FutureWarning, module=xgboost_data.__
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
+
 def preprocess_data(data):
     # Convert 'True' to 1 and any other value (including NaN) to 0
-    data['exploitability'] = data['exploitability'].apply(lambda x: 1 if x == True else 0)
+    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x is True else 0)
     return data
+
+
 @timer
 def train_and_save_model(data_path: str, export_model_path: str):
     # Load the data
@@ -31,11 +34,12 @@ def train_and_save_model(data_path: str, export_model_path: str):
     data = preprocess_data(data)
     # curl -X POST -H "Content-Type: application/json" -d '{"cve_id": "cve-2008-5499"}' http://localhost:3001/api/explain
     # If `strings` contains lists of strings, join them into a single string
-    data['strings'] = data['strings'].apply(lambda x: ' '.join(eval(x)))
+    data["strings"] = data["strings"].apply(lambda x: " ".join(eval(x)))
 
     # Split data into training and holdout sets
     X_train, X_holdout, y_train, y_holdout = train_test_split(
-        data['strings'], data['exploitability'], test_size=0.2, random_state=42)
+        data["strings"], data["exploitability"], test_size=0.2, random_state=42
+    )
 
     # Using TF-IDF to convert text data to numerical matrix
     tfidf_vectorizer = TfidfVectorizer(max_features=5000)
@@ -61,13 +65,10 @@ def train_and_save_model(data_path: str, export_model_path: str):
     # Save the model and the vectorizer
     model.save_model(export_model_path + ".json")
     logging.info(f"Model saved to {export_model_path}")
-    with open(export_model_path + "_vectorizer.pkl", 'wb') as vec_file:
+    with open(export_model_path + "_vectorizer.pkl", "wb") as vec_file:
         pickle.dump(tfidf_vectorizer, vec_file)
 
     logging.info("Model and vectorizer saved.")
-
-
-
 
 
 def main(data_path: str, export_model_path: str):

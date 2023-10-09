@@ -17,7 +17,7 @@
           <router-link to="/faqs" class="nav-link">FAQs</router-link>
         </b-nav-item>
         </b-navbar-nav>
-        
+
         <b-navbar-nav class="ml-auto">  <!-- Push content to the far right -->
           <b-nav-item>
             <img src="@/assets/SEFCOM.png" alt="SEFCOM" class="sefcom-logo"/>
@@ -39,7 +39,7 @@
 
 <script>
 export default {
-  
+
   name: 'App',
 }
 </script>

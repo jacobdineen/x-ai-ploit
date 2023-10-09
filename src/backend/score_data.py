@@ -1,15 +1,17 @@
-import xgboost as xgb
-import pickle
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
+# -*- coding: utf-8 -*-
 import logging
-from utils import timer 
+import pickle
+
+import pandas as pd
+import xgboost as xgb
+from utils import timer
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
+
 @timer
-def main(input_data_path: str, model_path: str, vectorizer_path: str, out_path:str) -> pd.DataFrame:
+def main(input_data_path: str, model_path: str, vectorizer_path: str, out_path: str) -> pd.DataFrame:
     """
     Score input data using a saved model and vectorizer.
 
@@ -25,25 +27,21 @@ def main(input_data_path: str, model_path: str, vectorizer_path: str, out_path:s
     # Load the saved model and vectorizer
     model = xgb.XGBClassifier()
     model.load_model(model_path + ".json")
-    with open(vectorizer_path + ".pkl", 'rb') as vec_file:
+    with open(vectorizer_path + ".pkl", "rb") as vec_file:
         vectorizer = pickle.load(vec_file)
 
     # Load and preprocess the input data
     data = pd.read_csv(input_data_path)
-    data['strings'] = data['strings'].apply(lambda x: ' '.join(eval(x)))
+    data["strings"] = data["strings"].apply(lambda x: " ".join(eval(x)))
 
     # Transform the input features using the loaded vectorizer
-    X = vectorizer.transform(data['strings'])
+    X = vectorizer.transform(data["strings"])
 
     # Predict scores using the loaded model
     scores = model.predict_proba(X)[:, 1]  # Assuming binary classification and you want the probability of class 1
 
     # Append the scores to the original input data
-    data['score'] = scores
+    data["score"] = scores
     data.to_csv(f"{out_path}.csv")
     logging.info(f"Scores saved to {out_path}.csv")
     return data
-
-
-if __name__ == "__main__":
-    main(input_data_path="data.csv", model_path="model.pkl", vectorizer_path="model_vectorizer.pkl")

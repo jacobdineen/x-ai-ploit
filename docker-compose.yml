@@ -10,6 +10,11 @@ services:
     ports: ["3001:3001"]
     networks:
       - custom_network
+    volumes:
+    - ./data:/app/data
+    - ./models:/app/models
+    environment:
+    - RUNNING_IN_DOCKER=1
 
 networks:
   custom_network:

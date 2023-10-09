@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import ast
 import logging
 import re
 
@@ -14,12 +13,13 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+# os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb=10'
 logging.basicConfig(level=logging.INFO)
 
 
 def preprocess_data(data):
     # Convert 'True' to 1 and any other value (including NaN) to 0
-    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x == True else 0)
+    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x is True else 0)
     return data
 
 
@@ -60,7 +60,7 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
     data["comments"] = data["comments"].apply(lambda x: " ".join(eval(x)))
     data["comments"] = data["comments"].apply(preprocess_comment)
     # Downsample the data
-    data = downsample_data(data)
+    # data = downsample_data(data)
 
     # Load tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
@@ -126,6 +126,7 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
     model.save_pretrained(export_model_path)
     tokenizer.save_pretrained(export_model_path)
     logging.info("Model and tokenizer saved.")
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
