@@ -60,3 +60,19 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+-   repo: local
+    hooks:
+    -   id: remove-pycache
+        name: Remove __pycache__
+        entry: bash -c 'find . -type d -name __pycache__ -exec rm -r {} +'
+        language: system
+        pass_filenames: false
+        always_run: true
+-   repo: local
+    hooks:
+    -   id: remove-caches
+        name: Remove caches
+        entry: bash -c 'find . -type d -name __pycache__ -exec rm -r {} + && rm -rf .pytest_cache'
+        language: system
+        pass_filenames: false
+        always_run: true
