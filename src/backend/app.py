@@ -119,8 +119,9 @@ def explain_prediction():
     # Get the prediction for the comment
     comment = entry["comments"].values[0]
     prediction = pred(comment)
+    logging.info(f"prediction {prediction}")
 
-    return jsonify({"shap_plot_text": shap_html_text, "shap_plot_bar": shap_html_bar, "prediction": prediction})
+    return jsonify({"shap_plot_text": shap_html_text, "shap_plot_bar": shap_html_bar, "preds": prediction})
 
 
 @app.route("/api/message", methods=["GET"])

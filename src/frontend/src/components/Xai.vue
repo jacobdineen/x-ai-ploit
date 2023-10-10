@@ -22,6 +22,21 @@
             <span class="progress-message">Generating explanations, hang tight...</span>
         </div>
 
+        <transition name="fade">
+        <div v-if="exploitNotLikelyScore" key="notLikely" class="prediction" :class="{ 'red-fill': true }">
+            P(exploitability = 0) = {{ exploitNotLikelyScore }}
+        </div>
+        </transition>
+
+        <transition name="fade">
+        <div v-if="exploitLikelyScore" key="likely" class="prediction" :class="{ 'blue-fill': true }">
+            P(exploitability = 1) = {{ exploitLikelyScore }}
+        </div>
+        </transition>
+
+
+
+
         <div class="plots-container">
             <!-- Existing SHAP Text Plot Display -->
             <iframe id="shapPlotFrameText" class="plot-frame" style="border:1px solid red;"></iframe>
@@ -30,12 +45,7 @@
             <img :src="shapPlotBarImage" class="plot-frame" style="border:1px solid blue;" />
         </div>
 
-        <div v-if="exploitNotLikelyScore">
-          P(exploitability = 0) = {{ exploitNotLikelyScore }}
-      </div>
-      <div v-if="exploitLikelyScore">
-          P(exploitability = 1) = {{ exploitLikelyScore }}
-      </div>
+
 
 
       </div>
@@ -44,6 +54,7 @@
 
 <script>
 import axios from 'axios';
+
 
 export default {
   data() {
@@ -143,6 +154,30 @@ watch: {
 </script>
 
 <style>
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter, .fade-leave-to /* .fade-leave-active in <2.1.8 */ {
+  opacity: 0;
+}
+
+.red-fill {
+    background-color: red;
+}
+
+.blue-fill {
+    background-color: blue;
+}
+
+.prediction {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    font-weight: bold;
+    text-align: center;
+    color: white; /* since the background colors are dark, you might want a lighter text color */
+}
+
 /* Styles for the plots container */
 .plots-container {
     flex-direction: column;  /* Stack children vertically */
