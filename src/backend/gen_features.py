@@ -3,14 +3,206 @@ import json
 import logging
 import os
 import re
+from datetime import datetime
 from typing import Any, Dict, List
 
 import pandas as pd
 from tqdm import tqdm
+from utils import *
 from utils import timer
 
+# Initialize logging
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
+
+
+def _get_do_labels(doc):
+    source = doc["source"]
+
+    if source == "xforce_api":
+        return True
+    elif source == "tenable_web":
+        return False
+    elif source == "tenable_plugins_web":
+        return True
+    elif source == "mitre_cvelist":
+        return False
+    elif source == "msrc_csvweb":
+        return True
+    elif source == "nvd_cves":
+        return False
+    elif source == "vulners_archive":
+        doc_type = doc["content"]["_source"]["type"]
+        if doc_type in ["nessus", "d2", "canvas", "metasploit"]:
+            return True
+        return False
+    return False  # Default return
+
+
+def _get_temporal_cvss_ecm(ecm):
+    ecm = ecm.lower()
+    if ecm == "functional":
+        return "functional"
+    if ecm == "high":
+        return "high"
+    if ecm in ["proof-of-concept", "proof of concept"]:
+        return "proof-of-concept"
+    if ecm == "unproven":
+        return "unproven"
+    if ecm in ["not defined", "not-defined", "none-found"]:
+        return "not-defined"
+
+    assert False, ">%s< entry not defined" % ecm
+
+
+def _get_temporal_vector_exploitability_scores(tvs):
+    min_score = 4
+
+    for tv in tvs:
+        if tv is None:
+            continue
+        expv = re.findall(r"E:(.*?)/", tv)[0]
+        expvnum = None
+
+        if expv == "F":
+            expvnum = 0
+        elif expv == "H":
+            expvnum = 1
+        elif expv == "POC":
+            expvnum = 2
+        elif expv == "P":
+            expvnum = 2
+        elif expv == "U":
+            expvnum = 3
+        elif expv == "ND":
+            expvnum = 4
+        elif expv == "X":
+            expvnum = 4
+        else:
+            assert False, expv
+        min_score = min(min_score, expvnum)
+    return {0: "functional", 1: "high", 2: "proof-of-concept", 3: "unproven", 4: "not-defined"}[min_score]
+
+
+def extract_labels(input_folder, output_folder):
+    labels_fo = open(os.path.join(output_folder, "labels.json"), "w")
+
+    for fl in tqdm(os.listdir(input_folder)):
+        if ".json" not in fl:
+            continue
+
+        fi = open(os.path.join(input_folder, fl), "r")
+        for row in fi:
+            doc = json.loads(row)
+
+            cveids = doc["cveids_explicit"]
+            if len(cveids) != 1:
+                continue
+            cveid = cveids[0]
+
+            publication_date = datetime.fromtimestamp(doc["date_published"]["$date"] / 1000.0).isoformat()
+            crawl_date = datetime.fromtimestamp(doc["date_crawl"]["$date"] / 1000.0).isoformat()
+            dict_base = {
+                "cveid": cveid,
+                "hash": doc["hash"],
+                "crawl_date": crawl_date,
+                "publication_date": publication_date,
+            }
+            do_labels = _get_do_labels(doc)
+            label = None
+            label_details = {}
+            if do_labels:
+                temporal_vectors_list = []
+                if doc["source"] == "xforce_api":
+                    # if doc['content'].get('exploitability',None) is None:
+                    # 	pprint.pprint(doc)
+                    # 	exit()
+                    exploitability = doc["content"].get("exploitability", None)
+                    if exploitability is None:
+                        continue
+                    label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
+                    label_details["exploit_code_maturity"] = _get_temporal_cvss_ecm(exploitability)
+                    label_details["exploit_url"] = (
+                        "https://exchange.xforce.ibmcloud.com/vulnerabilities/%s" % doc["content"]["xfdbid"]
+                    )
+
+                    # if cveid_exploitability_dict.get(cveid,None) is None:
+                    # 	cveid_exploitability_dict[cveid] = set()
+                    # cveid_exploitability_dict[cveid].add(exploitability)
+                if doc["source"] == "vulners_archive":
+                    src = doc["content"]["_source"]["type"]
+                    if src == "nessus":
+                        temporal_vectors_list = []
+                        cvss_temporal2 = re.findall(
+                            r"script_set_cvss_temporal_vector\(\s*\"(.+?)\"\s*\)", "\n".join(doc["content"]["text"])
+                        )
+                        assert len(cvss_temporal2) <= 1
+                        if len(cvss_temporal2) == 1:
+                            temporal_vectors_list.append(cvss_temporal2[0])
+
+                        cvss_temporal3 = re.findall(
+                            r"script_set_cvss3_temporal_vector\(\s*\"(.+?)\"\s*\)", "\n".join(doc["content"]["text"])
+                        )
+                        assert len(cvss_temporal3) <= 1
+                        if len(cvss_temporal3) == 1:
+                            temporal_vectors_list.append(cvss_temporal3[0])
+
+                        # pprint.pprint(temporal_vectors_list)
+                        # exit()
+                        exploitability = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
+                        label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
+                        label_details["exploit_code_maturity"] = exploitability
+                        label_details["exploit_url"] = doc["content"]["_source"]["href"]
+                    elif src == "d2":
+                        label = True
+                        label_details["exploit_evidence"] = "d2"
+                        label_details["exploit_url"] = doc["content"]["_source"]["href"]
+                    elif src == "canvas":
+                        label = True
+                        label_details["exploit_evidence"] = "canvas"
+                        label_details["exploit_url"] = doc["content"]["_source"]["href"]
+                        # pprint.pprint(doc)
+                        # pprint.pprint(label_details)
+                        # exit()
+                    elif src == "metasploit":
+                        label = True
+                        label_details["exploit_evidence"] = "metasploit"
+                        label_details["exploit_url"] = doc["content"]["_source"]["sourceHref"]
+                    else:
+                        assert False, "Vulners source=%s not defined" % src
+                if doc["source"] == "tenable_plugins_web":
+                    temporal_vectors_list = []
+                    cvss_temporal2 = doc["content"].get("cvss_v2_0", {}).get("temporal_vector", None)
+                    if cvss_temporal2 is not None:
+                        temporal_vectors_list.append(cvss_temporal2)
+
+                    cvss_temporal3 = doc["content"].get("cvss_v3_0", {}).get("temporal_vector", None)
+                    if cvss_temporal3 is not None:
+                        temporal_vectors_list.append(cvss_temporal3)
+
+                    if len(temporal_vectors_list) == 0:
+                        continue
+                    exploitability = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
+                    label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
+                    label_details["exploit_code_maturity"] = exploitability
+                    label_details["exploit_url"] = "https://www.tenable.com/plugins/nessus/%s" % (
+                        doc["content"]["plugin_details"]["id"]
+                    )
+
+                if doc["source"] == "msrc_csvweb":
+                    label = doc["content"]["Exploited"].lower() == "yes"
+                    label_details["exploit_evidence"] = "msrc"
+                    label_details["exploit_url"] = doc["content"]["CVE Number"]
+
+            if label is not None:
+                dict_label = dict(dict_base)
+                dict_label["exploitability"] = label
+                dict_label.update(label_details)
+                labels_fo.write(json.dumps(dict_label) + "\n")
+
+    logging.info("Done extracting labels.")
+
+    labels_fo.close()
 
 
 @timer
@@ -75,51 +267,6 @@ def load_json_to_dataframe(filepath: str) -> pd.DataFrame:
     return pd.read_json(filepath, lines=True)
 
 
-def _get_temporal_vector_exploitability_scores(tvs):
-    min_score = 4
-
-    for tv in tvs:
-        if tv is None:
-            continue
-        expv = re.findall(r"E:(.*?)/", tv)[0]
-        expvnum = None
-
-        if expv == "F":
-            expvnum = 0
-        elif expv == "H":
-            expvnum = 1
-        elif expv == "POC":
-            expvnum = 2
-        elif expv == "P":
-            expvnum = 2
-        elif expv == "U":
-            expvnum = 3
-        elif expv == "ND":
-            expvnum = 4
-        elif expv == "X":
-            expvnum = 4
-        else:
-            assert False, expv
-        min_score = min(min_score, expvnum)
-    return {0: "functional", 1: "high", 2: "proof-of-concept", 3: "unproven", 4: "not-defined"}[min_score]
-
-
-def _get_temporal_cvss_ecm(ecm):
-    ecm = ecm.lower()
-    if ecm == "functional":
-        return "functional"
-    if ecm == "high":
-        return "high"
-    if ecm in ["proof-of-concept", "proof of concept"]:
-        return "proof-of-concept"
-    if ecm == "unproven":
-        return "unproven"
-    if ecm in ["not defined", "not-defined", "none-found"]:
-        return "not-defined"
-
-    assert False, ">%s< entry not defined" % ecm
-
-
 @timer
 def merge_dataframes_on_column(df1: pd.DataFrame, df2: pd.DataFrame, column_name: str) -> pd.DataFrame:
     """
@@ -139,107 +286,6 @@ def merge_dataframes_on_column(df1: pd.DataFrame, df2: pd.DataFrame, column_name
     return merged_df if not merged_df.empty else pd.DataFrame()
 
 
-@timer
-def filter_and_load_json(directory: str) -> pd.DataFrame:
-    """
-    Loads the 'source' and 'hash' columns from multiple JSON files in the directory and filters rows
-    containing 'tenable' or 'xforce' in the 'source' field. It also adds the filename.
-
-    Parameters:
-    - directory (str): Path to the directory containing the JSON files.
-
-    Returns:
-    - pd.DataFrame: Filtered DataFrame containing data from all JSON files in the directory.
-    """
-
-    rows = []
-
-    # Iterate over each file in the directory
-    for filename in tqdm(os.listdir(directory)):
-        if filename.endswith(".json") and os.path.isfile(os.path.join(directory, filename)):
-            filepath = os.path.join(directory, filename)
-
-            with open(filepath, "r") as f:
-                for line in f:
-                    data = json.loads(line)
-                    label = False
-                    source = data.get("source", "").lower()
-                    if "xforce" in source:
-                        label = data.get("exploitability", None)
-
-                    elif source == "tenable_plugins_web":
-                        temporal_vectors_list = []
-
-                        cvss_temporal2 = data.get("content", {}).get("cvss_v2_0", {}).get("temporal_vector", None)
-                        if cvss_temporal2 is not None:
-                            temporal_vectors_list.append(cvss_temporal2)
-
-                        cvss_temporal3 = data.get("content", {}).get("cvss_v3_0", {}).get("temporal_vector", None)
-                        if cvss_temporal3 is not None:
-                            temporal_vectors_list.append(cvss_temporal3)
-
-                        if len(temporal_vectors_list) > 0:
-                            label = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
-                        else:
-                            label = False
-
-                    elif source == "vulners_archive":
-                        data = json.loads(line)
-                        src = data["content"]["_source"]["type"]
-                        if src == "nessus":
-                            temporal_vectors_list = []
-                            cvss_temporal2 = re.findall(
-                                r"script_set_cvss_temporal_vector\(\s*\"(.+?)\"\s*\)",
-                                "\n".join(data["content"]["text"]),
-                            )
-                            assert len(cvss_temporal2) <= 1
-                            if len(cvss_temporal2) == 1:
-                                temporal_vectors_list.append(cvss_temporal2[0])
-
-                            cvss_temporal3 = re.findall(
-                                r"script_set_cvss3_temporal_vector\(\s*\"(.+?)\"\s*\)",
-                                "\n".join(data["content"]["text"]),
-                            )
-                            assert len(cvss_temporal3) <= 1
-                            if len(cvss_temporal3) == 1:
-                                temporal_vectors_list.append(cvss_temporal3[0])
-
-                            exploitability = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
-                            label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
-
-                        elif src == "d2":
-                            label = True
-
-                        elif src == "canvas":
-                            label = True
-
-                        elif src == "metasploit":
-                            label = True
-
-                        else:
-                            label = False
-
-                    if source == "msrc_csvweb":
-                        data = json.loads(line)
-                        label = data["content"]["Exploited"].lower() == "yes"
-                    # we really only care where label is not False or None
-                    # if it is, we can just label it as 0 downstream
-                    if label is not False and label is not None:
-                        rows.append(
-                            {
-                                "hash": data.get("hash", None),
-                                "source": source,
-                                "filename": filename,
-                                "exploitability": label,
-                            }
-                        )
-
-    # Convert to DataFrame
-    combined_df = pd.DataFrame(rows)
-
-    return combined_df
-
-
 def main(exploit_data_directory: str, documents_path: str, labels_directory: str, export_path: str):
     # Extracting exploit data and loading it into a DataFrame
     exploit_data = extract_exploit_data(exploit_data_directory)
@@ -256,14 +302,20 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
     logging.info("Merged DataFrame created.")
     logging.info(f"Number of rows: {merged_df.shape[0]}")
 
-    labels_df = filter_and_load_json(labels_directory)
-    print(labels_df["exploitability"].value_counts())
+    logging.info("extracting labels")
+    extract_labels(input_folder=labels_directory, output_folder="data/")
+    labels_df = pd.read_json("data/labels.json", lines=True)
+    cols = ["hash", "exploitability", "exploit_code_maturity", "exploit_url", "exploit_evidence"]
+    labels_df = labels_df[cols]
     logging.info(f"Loaded {len(labels_df)} rows from the labels directory.")
     logging.info(labels_df.head())
     # labels_df.to_csv("test.csv")
-    final_merged_df = pd.merge(merged_df, labels_df[["hash", "exploitability"]], on="hash", how="left")
+    final_merged_df = pd.merge(merged_df, labels_df, on="hash", how="left")
+    final_merged_df["exploitability"] = final_merged_df["exploitability"].apply(lambda x: 1 if x else 0)
     logging.info("Final merged DataFrame created.")
     logging.info(f"Number of rows: {final_merged_df.shape[0]}")
+    logging.info("Final merged DataFrame head:")
+    logging.info(final_merged_df.head())
 
     # we get very few hash matches to anything other than vulner?
     print(final_merged_df["exploitability"].value_counts())
@@ -272,10 +324,11 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
 
 
 if __name__ == "__main__":
+    # figure out correct pathing later
     exploit_data_directory = "data/copy20221006/files/train_19700101_20210401/exploits_text"
     documents_path = "data/copy20221006/files/train_19700101_20210401/documents.json"
     labels_directory = "data/copy20221006/documents/train_19700101_20210401"
-    export_path = "final_merged_df"
+    export_path = "data/data"
     main(
         exploit_data_directory=exploit_data_directory,
         documents_path=documents_path,

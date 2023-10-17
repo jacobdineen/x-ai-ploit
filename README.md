@@ -28,3 +28,5 @@ docker exec -it xaiploit-backend-1 python main.py train-model
 ```python
 docker exec -it xaiploit-backend-1 python main.py score-data
 ```
+
+# TO DO LIST BELOW PLEASE

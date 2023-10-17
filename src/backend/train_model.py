@@ -9,7 +9,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.utils import validation
-from utils import timer
+from utils import preprocess_data, timer
 from xgboost import data as xgboost_data
 
 warnings.filterwarnings("ignore", category=FutureWarning, module=validation.__name__)
@@ -17,12 +17,6 @@ warnings.filterwarnings("ignore", category=FutureWarning, module=xgboost_data.__
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
-
-
-def preprocess_data(data):
-    # Convert 'True' to 1 and any other value (including NaN) to 0
-    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x is True else 0)
-    return data
 
 
 @timer

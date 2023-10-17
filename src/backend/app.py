@@ -1,55 +1,46 @@
 # -*- coding: utf-8 -*-
-import ast
 import base64
 import io
 import logging
 import pickle
-import re
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import shap
 import transformers
 import xgboost as xgb
-from flask import Flask, jsonify, request  # Add 'request' here
+from flask import Flask, jsonify, request
 from flask_cors import CORS, cross_origin
 from transformers import DistilBertForSequenceClassification, DistilBertTokenizer
+from utils import preprocess_comment
 
-
-def truncate_text(text, max_chars=1028):
-    return text[:max_chars]
-
-
-def preprocess_comment(comment):
-    comment_list = ast.literal_eval(comment)
-    comment = " ".join(comment_list)
-    comment = re.sub(r"#", "", comment)  # Remove all instances of '#'
-    return truncate_text(comment, 500)
-
-
+# Configuration
 logging.basicConfig(level=logging.INFO)
-
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+
+def load_xgb_model():
+    model = xgb.XGBClassifier()
+    model.load_model("models/model.json")
+    with open("models/model_vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+    return model, vectorizer
+
+
+def load_bert_model():
+    export_model_path = "models/bert_model"
+    tokenizer = DistilBertTokenizer.from_pretrained(export_model_path)
+    model = DistilBertForSequenceClassification.from_pretrained(export_model_path)
+    model.config.id2label = {0: "exploit_not_likely", 1: "exploit_likely"}
+    model.config.label2id = {"exploit_not_likely": 0, "exploit_likely": 1}
+    return model, tokenizer
+
+
 df = pd.read_csv("data/scored_data.csv")
-
-# Load your DataFrame here
-model = xgb.XGBClassifier()
-model.load_model("models/model" + ".json")
-
-with open("models/model_vectorizer.pkl", "rb") as f:
-    vectorizer = pickle.load(f)
-
-# load the model and tokenizer
-export_model_path = "models/bert_model"
-tokenizer = DistilBertTokenizer.from_pretrained(export_model_path)
-model = DistilBertForSequenceClassification.from_pretrained(export_model_path)
-# Modify the class names
-model.config.id2label = {0: "exploit_not_likely", 1: "exploit_likely"}
-model.config.label2id = {"exploit_not_likely": 0, "exploit_likely": 1}
-
-pred = transformers.pipeline("text-classification", model=model, tokenizer=tokenizer, device=-1, return_all_scores=True)
+xgb_model, vectorizer = load_xgb_model()
+bert_model, tokenizer = load_bert_model()
+pred = transformers.pipeline("text-classification", model=bert_model, tokenizer=tokenizer, return_all_scores=True)
 explainer = shap.Explainer(pred)
 
 

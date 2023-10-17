@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import re
 
 import pandas as pd
 import torch
@@ -12,25 +11,9 @@ from transformers import (
     DistilBertTokenizer,
     get_linear_schedule_with_warmup,
 )
+from utils import preprocess_comment, preprocess_data
 
-# os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb=10'
 logging.basicConfig(level=logging.INFO)
-
-
-def preprocess_data(data):
-    # Convert 'True' to 1 and any other value (including NaN) to 0
-    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x is True else 0)
-    return data
-
-
-def truncate_text(text, max_chars=500):
-    return text[:max_chars]
-
-
-def preprocess_comment(comment):
-    comment = " ".join(comment)
-    comment = re.sub(r"[^a-zA-Z0-9\s]", "", comment)  # Remove all non-alphanumeric characters except spaces
-    return truncate_text(comment, 500)
 
 
 def downsample_data(data):

@@ -1,41 +1,41 @@
-FROM python:3.10-slim
-# Use the official Ubuntu Docker image as the base image
-# FROM ubuntu:latest
-
-# # Update package list and install packages
-# RUN apt-get update && apt-get install -y \
-#     python3 \
-#     python3-pip \
-#     python3-setuptools
-#     # vim \
-#     # zsh \
-#     # curl \
-#     # git \
-#     # man-db \
-#     # ucspi-tcp \
-#     # gdb \
-#     # netcat && \
-#     # rm -rf /var/lib/apt/lists/*
+FROM nvidia/cuda:12.2.0-base-ubuntu22.04
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    vim \
+    bash \
+    zsh \
+    curl \
+    git \
+    sudo \
+    python3-pip \
+    python3-dev
 
 # Copy the requirements file into the container
 COPY docker_requirements.txt .
 
+# Install Python3 and Pip
+RUN apt-get install -y python3-pip
+
 # Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
-#&& pip3 install thefuck --user
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install PyTorch and torchvision
+RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu111/torch_stable.html
 
 # Copy the rest of the application code into the container
 COPY . .
 
 # Install ZSH plugins
-# RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
-#     -t robbyrussell \
-#     -p git \
-#     -p https://github.com/zsh-users/zsh-autosuggestions \
-#     -p https://github.com/zsh-users/zsh-syntax-highlighting \
-#     -p https://github.com/zsh-users/zsh-completions
+RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
+    -t robbyrussell \
+    -p git \
+    -p https://github.com/zsh-users/zsh-autosuggestions \
+    -p https://github.com/zsh-users/zsh-syntax-highlighting \
+    -p https://github.com/zsh-users/zsh-completions
 
-# Set the command to run your application
 CMD ["python3", "app.py"]
