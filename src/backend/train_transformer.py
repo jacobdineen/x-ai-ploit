@@ -7,8 +7,10 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from tqdm import tqdm
 from transformers import (
     AdamW,
-    DistilBertForSequenceClassification,
-    DistilBertTokenizer,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    LlamaForSequenceClassification,
+    LlamaTokenizer,
     get_linear_schedule_with_warmup,
 )
 from utils import preprocess_comment, preprocess_data
@@ -36,6 +38,7 @@ def downsample_data(data):
 
 
 def train_and_save_bert_model(data_path: str, export_model_path: str):
+    torch.cuda.empty_cache()
     logging.info("Training BERT model...")
     # Load the data
     data = pd.read_csv(data_path)
@@ -46,14 +49,15 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
     # data = downsample_data(data)
 
     # Load tokenizer
-    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("TinyPixel/Llama-2-7B-bf16-sharded")
+    tokenizer.pad_token = tokenizer.eos_token
     logging.info("Tokenizer loaded.")
+    print(len(data["comments"].tolist()))
     # Tokenize the dataset
-    encoded_data = tokenizer(
-        data["comments"].tolist(), padding="max_length", truncation=True, max_length=256, return_tensors="pt"
-    )
+    encoded_data = tokenizer(data["comments"].tolist(), padding=True, truncation=True, return_tensors="pt")
     input_ids = encoded_data["input_ids"]
     attention_masks = encoded_data["attention_mask"]
+
     labels = torch.tensor(data["exploitability"].tolist())
     logging.info("Dataset tokenized.")
 
@@ -62,14 +66,14 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-    BATCH_SIZE = 128  # adjust as per your system's capabilities
+    BATCH_SIZE = 16  # adjust as per your system's capabilities
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     validation_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     logging.info("Dataloaders constructed")
     # Load model
 
-    model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
-    model.to("cuda")  # if using GPU
+    model = AutoModelForSequenceClassification.from_pretrained("TinyPixel/Llama-2-7B-bf16-sharded", num_labels=2)
+    model.to("cuda", dtype=torch.float16)  # if using GPU
     logging.info("Model loaded.")
 
     optimizer = AdamW(model.parameters(), lr=2e-5)
@@ -113,4 +117,4 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
 
 
 if __name__ == "__main__":
-    train_and_save_bert_model(data_path="data.csv", export_model_path="bert_model")
+    train_and_save_bert_model(data_path="data/data.csv", export_model_path="bert_model")

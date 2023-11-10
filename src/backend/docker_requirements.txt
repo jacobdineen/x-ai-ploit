@@ -7,9 +7,11 @@ matplotlib
 pandas==2.1.1
 polars
 pre-commit==2.21.0
+protobuf
 pytest==7.3.1
 requests
 scikit-learn==1.2.2
+sentencepiece
 shap
 tokenizers
 torch

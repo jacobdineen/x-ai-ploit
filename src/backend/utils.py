@@ -30,7 +30,14 @@ def truncate_text(text, max_chars=1028):
 
 
 def preprocess_comment(comment):
-    comment_list = ast.literal_eval(comment)
+    if comment.startswith("[") and comment.endswith("]"):
+        try:
+            comment_list = ast.literal_eval(comment)
+        except (SyntaxError, ValueError):
+            comment_list = [comment]  # fallback behavior
+    else:
+        comment_list = [comment]
+
     comment = " ".join(comment_list)
     comment = re.sub(r"#", "", comment)
     return truncate_text(comment, 500)
