@@ -13,7 +13,7 @@ from scipy.sparse import coo_matrix
 # pylint: disable=W0108
 def read_and_preprocess(file_path, nrows=None):
     df = pd.read_csv(file_path, nrows=nrows)
-    df["cveids_explicit"] = df["cveids_explicit"].apply(lambda x: eval(x))
+    df["cveids_explicit"] = df["cveids_explicit"].apply(eval)
     return df.explode("cveids_explicit")
 
 
