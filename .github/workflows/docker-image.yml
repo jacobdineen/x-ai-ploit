@@ -37,10 +37,4 @@ jobs:
 
       - name: Set up Docker image tag
         id: docker_tag
-        run: echo "DOCKER_TAG=xaiploit:$(date +%s)" >> $GITHUB_ENV
-
-      - name: Build the Docker image
-        run: docker build . --file src/backend/Dockerfile --tag ${{ env.DOCKER_TAG }}
-
-      - name: Testing gpu
-        run: docker run --gpus all adv_rl nvidia-smi
+        run: docker compose down && docker compose build && docker compose up --build -d && docker image prune -f
