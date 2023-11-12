@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Grab all documents from a directory of JSON files and write them to a CSV file.
+"""
+Grab all documents from a directory of JSON files and write them to a CSV file.
 Then Grab only documents that have no CVEs in either the cveids_db or cveids_explicit columns.
 Used for entity recognition task
 """
@@ -72,8 +73,7 @@ if __name__ == "__main__":
 
         # Now filter the DataFrame to get rows where both columns have empty lists
         filtered_df = df[
-            (df["cveids_db"].map(lambda d: len(d) == 0))
-            & (df["cveids_explicit"].map(lambda d: len(d) == 0))
+            (df["cveids_db"].map(lambda d: len(d) == 0)) & (df["cveids_explicit"].map(lambda d: len(d) == 0))
         ]
         filtered_df.to_csv(output_cveless_csv, index=False)
         logging.info(f"cve-less df saved to {output_cveless_csv}")
@@ -101,3 +101,4 @@ if __name__ == "__main__":
     number of documents: {len(non_cves)}
     """
     )
+    logging.info(cves.head())
