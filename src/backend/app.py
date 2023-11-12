@@ -40,7 +40,9 @@ def load_bert_model():
 df = pd.read_csv("data/scored_data.csv")
 xgb_model, vectorizer = load_xgb_model()
 bert_model, tokenizer = load_bert_model()
-pred = transformers.pipeline("text-classification", model=bert_model, tokenizer=tokenizer, return_all_scores=True)
+pred = transformers.pipeline(
+    "text-classification", model=bert_model, tokenizer=tokenizer, return_all_scores=True
+)
 explainer = shap.Explainer(pred)
 
 
@@ -56,7 +58,10 @@ def get_hashes_for_cve():
 @app.route("/api/get_suggestions", methods=["GET"])
 @cross_origin()
 def get_suggestions():
-    suggestions = {"cve_ids": df["cveid"].unique().tolist(), "hashes": df["hash"].unique().tolist()}
+    suggestions = {
+        "cve_ids": df["cveid"].unique().tolist(),
+        "hashes": df["hash"].unique().tolist(),
+    }
     return jsonify(suggestions)
 
 
@@ -82,13 +87,17 @@ def explain_prediction():
 
     shap_html_text = shap.plots.text(shap_values, display=False)
     # Bar SHAP plot
-    _, ax = plt.subplots(figsize=(8, 10))  # Adjust the height for more space, especially if you have many features
+    _, ax = plt.subplots(
+        figsize=(8, 10)
+    )  # Adjust the height for more space, especially if you have many features
 
     # Generate the SHAP bar plot
     shap.plots.bar(shap_values[0, :, 1], order=shap.Explanation.argsort, show=False)
 
     # Adjust tick label size and orientation for better readability (optional)
-    ax.tick_params(axis="both", which="major", labelsize=10)  # Change '10' to adjust the font size
+    ax.tick_params(
+        axis="both", which="major", labelsize=10
+    )  # Change '10' to adjust the font size
     for label in ax.get_xticklabels():
         label.set_ha("right")  # Horizontal alignment
         label.set_rotation(45)  # Rotation degree
@@ -112,7 +121,13 @@ def explain_prediction():
     prediction = pred(comment)
     logging.info(f"prediction {prediction}")
 
-    return jsonify({"shap_plot_text": shap_html_text, "shap_plot_bar": shap_html_bar, "preds": prediction})
+    return jsonify(
+        {
+            "shap_plot_text": shap_html_text,
+            "shap_plot_bar": shap_html_bar,
+            "preds": prediction,
+        }
+    )
 
 
 @app.route("/api/message", methods=["GET"])
@@ -124,7 +139,9 @@ def get_data():
     selected_df = df[["cveid", "score", "hash", "publication_date"]]
 
     if cveid_filter:
-        filtered_df = selected_df[selected_df["cveid"].str.contains(cveid_filter, case=False)]
+        filtered_df = selected_df[
+            selected_df["cveid"].str.contains(cveid_filter, case=False)
+        ]
     else:
         filtered_df = selected_df
 

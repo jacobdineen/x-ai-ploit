@@ -4,7 +4,11 @@ import logging
 import pandas as pd
 import torch
 from tqdm import tqdm
-from transformers import DistilBertForSequenceClassification, DistilBertTokenizer, pipeline
+from transformers import (
+    DistilBertForSequenceClassification,
+    DistilBertTokenizer,
+    pipeline,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,10 +32,16 @@ def main():
     logging.info("model and tokenizer loaded")
 
     # Setup the classification pipeline
-    device = 0 if torch.cuda.is_available() else -1  # 0 represents the first GPU; -1 represents the CPU.
+    device = (
+        0 if torch.cuda.is_available() else -1
+    )  # 0 represents the first GPU; -1 represents the CPU.
     logging.info(f"device: {device}")
     classification_pipeline = pipeline(
-        "text-classification", model=model, tokenizer=tokenizer, device=device, return_all_scores=True
+        "text-classification",
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        return_all_scores=True,
     )
 
     # Load the data

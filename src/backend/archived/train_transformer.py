@@ -6,7 +6,12 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from tqdm import tqdm
-from transformers import AdamW, AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
+from transformers import (
+    AdamW,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+)
 from utils import preprocess_comment, preprocess_data
 
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +31,9 @@ def downsample_data(data):
 
     # Combine and shuffle
     downsampled_data = pd.concat([positive_downsampled, negative_downsampled])
-    downsampled_data = downsampled_data.sample(frac=1, random_state=42).reset_index(drop=True)
+    downsampled_data = downsampled_data.sample(frac=1, random_state=42).reset_index(
+        drop=True
+    )
 
     return downsampled_data
 
@@ -48,7 +55,9 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
     logging.info("Tokenizer loaded.")
     print(len(data["comments"].tolist()))
     # Tokenize the dataset
-    encoded_data = tokenizer(data["comments"].tolist(), padding=True, truncation=True, return_tensors="pt")
+    encoded_data = tokenizer(
+        data["comments"].tolist(), padding=True, truncation=True, return_tensors="pt"
+    )
     input_ids = encoded_data["input_ids"]
     attention_masks = encoded_data["attention_mask"]
 
@@ -62,17 +71,23 @@ def train_and_save_bert_model(data_path: str, export_model_path: str):
 
     BATCH_SIZE = 16  # adjust as per your system's capabilities
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    validation_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    validation_dataloader = DataLoader(
+        val_dataset, batch_size=BATCH_SIZE, shuffle=False
+    )
     logging.info("Dataloaders constructed")
     # Load model
 
-    model = AutoModelForSequenceClassification.from_pretrained("TinyPixel/Llama-2-7B-bf16-sharded", num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "TinyPixel/Llama-2-7B-bf16-sharded", num_labels=2
+    )
     model.to("cuda", dtype=torch.float16)  # if using GPU
     logging.info("Model loaded.")
 
     optimizer = AdamW(model.parameters(), lr=2e-5)
     total_steps = len(train_dataloader) * 3  # assuming 3 epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=0, num_training_steps=total_steps
+    )
 
     # Training loop
     for epoch in range(3):  # adjust number of epochs as needed

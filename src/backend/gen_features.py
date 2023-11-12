@@ -81,7 +81,13 @@ def _get_temporal_vector_exploitability_scores(tvs):
         else:
             assert False, expv
         min_score = min(min_score, expvnum)
-    return {0: "functional", 1: "high", 2: "proof-of-concept", 3: "unproven", 4: "not-defined"}[min_score]
+    return {
+        0: "functional",
+        1: "high",
+        2: "proof-of-concept",
+        3: "unproven",
+        4: "not-defined",
+    }[min_score]
 
 
 def extract_labels(input_folder, output_folder):
@@ -100,8 +106,12 @@ def extract_labels(input_folder, output_folder):
                 continue
             cveid = cveids[0]
 
-            publication_date = datetime.fromtimestamp(doc["date_published"]["$date"] / 1000.0).isoformat()
-            crawl_date = datetime.fromtimestamp(doc["date_crawl"]["$date"] / 1000.0).isoformat()
+            publication_date = datetime.fromtimestamp(
+                doc["date_published"]["$date"] / 1000.0
+            ).isoformat()
+            crawl_date = datetime.fromtimestamp(
+                doc["date_crawl"]["$date"] / 1000.0
+            ).isoformat()
             dict_base = {
                 "cveid": cveid,
                 "hash": doc["hash"],
@@ -120,10 +130,16 @@ def extract_labels(input_folder, output_folder):
                     exploitability = doc["content"].get("exploitability", None)
                     if exploitability is None:
                         continue
-                    label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
-                    label_details["exploit_code_maturity"] = _get_temporal_cvss_ecm(exploitability)
+                    label = _get_temporal_cvss_ecm(exploitability) in [
+                        "functional",
+                        "high",
+                    ]
+                    label_details["exploit_code_maturity"] = _get_temporal_cvss_ecm(
+                        exploitability
+                    )
                     label_details["exploit_url"] = (
-                        "https://exchange.xforce.ibmcloud.com/vulnerabilities/%s" % doc["content"]["xfdbid"]
+                        "https://exchange.xforce.ibmcloud.com/vulnerabilities/%s"
+                        % doc["content"]["xfdbid"]
                     )
 
                     # if cveid_exploitability_dict.get(cveid,None) is None:
@@ -134,14 +150,16 @@ def extract_labels(input_folder, output_folder):
                     if src == "nessus":
                         temporal_vectors_list = []
                         cvss_temporal2 = re.findall(
-                            r"script_set_cvss_temporal_vector\(\s*\"(.+?)\"\s*\)", "\n".join(doc["content"]["text"])
+                            r"script_set_cvss_temporal_vector\(\s*\"(.+?)\"\s*\)",
+                            "\n".join(doc["content"]["text"]),
                         )
                         assert len(cvss_temporal2) <= 1
                         if len(cvss_temporal2) == 1:
                             temporal_vectors_list.append(cvss_temporal2[0])
 
                         cvss_temporal3 = re.findall(
-                            r"script_set_cvss3_temporal_vector\(\s*\"(.+?)\"\s*\)", "\n".join(doc["content"]["text"])
+                            r"script_set_cvss3_temporal_vector\(\s*\"(.+?)\"\s*\)",
+                            "\n".join(doc["content"]["text"]),
                         )
                         assert len(cvss_temporal3) <= 1
                         if len(cvss_temporal3) == 1:
@@ -149,8 +167,13 @@ def extract_labels(input_folder, output_folder):
 
                         # pprint.pprint(temporal_vectors_list)
                         # exit()
-                        exploitability = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
-                        label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
+                        exploitability = _get_temporal_vector_exploitability_scores(
+                            temporal_vectors_list
+                        )
+                        label = _get_temporal_cvss_ecm(exploitability) in [
+                            "functional",
+                            "high",
+                        ]
                         label_details["exploit_code_maturity"] = exploitability
                         label_details["exploit_url"] = doc["content"]["_source"]["href"]
                     elif src == "d2":
@@ -167,25 +190,38 @@ def extract_labels(input_folder, output_folder):
                     elif src == "metasploit":
                         label = True
                         label_details["exploit_evidence"] = "metasploit"
-                        label_details["exploit_url"] = doc["content"]["_source"]["sourceHref"]
+                        label_details["exploit_url"] = doc["content"]["_source"][
+                            "sourceHref"
+                        ]
                     else:
                         assert False, "Vulners source=%s not defined" % src
                 if doc["source"] == "tenable_plugins_web":
                     temporal_vectors_list = []
-                    cvss_temporal2 = doc["content"].get("cvss_v2_0", {}).get("temporal_vector", None)
+                    cvss_temporal2 = (
+                        doc["content"].get("cvss_v2_0", {}).get("temporal_vector", None)
+                    )
                     if cvss_temporal2 is not None:
                         temporal_vectors_list.append(cvss_temporal2)
 
-                    cvss_temporal3 = doc["content"].get("cvss_v3_0", {}).get("temporal_vector", None)
+                    cvss_temporal3 = (
+                        doc["content"].get("cvss_v3_0", {}).get("temporal_vector", None)
+                    )
                     if cvss_temporal3 is not None:
                         temporal_vectors_list.append(cvss_temporal3)
 
                     if len(temporal_vectors_list) == 0:
                         continue
-                    exploitability = _get_temporal_vector_exploitability_scores(temporal_vectors_list)
-                    label = _get_temporal_cvss_ecm(exploitability) in ["functional", "high"]
+                    exploitability = _get_temporal_vector_exploitability_scores(
+                        temporal_vectors_list
+                    )
+                    label = _get_temporal_cvss_ecm(exploitability) in [
+                        "functional",
+                        "high",
+                    ]
                     label_details["exploit_code_maturity"] = exploitability
-                    label_details["exploit_url"] = "https://www.tenable.com/plugins/nessus/%s" % (
+                    label_details[
+                        "exploit_url"
+                    ] = "https://www.tenable.com/plugins/nessus/%s" % (
                         doc["content"]["plugin_details"]["id"]
                     )
 
@@ -268,7 +304,9 @@ def load_json_to_dataframe(filepath: str) -> pd.DataFrame:
 
 
 @timer
-def merge_dataframes_on_column(df1: pd.DataFrame, df2: pd.DataFrame, column_name: str) -> pd.DataFrame:
+def merge_dataframes_on_column(
+    df1: pd.DataFrame, df2: pd.DataFrame, column_name: str
+) -> pd.DataFrame:
     """
     Merges two DataFrames based on a specified column.
 
@@ -315,7 +353,13 @@ def main(
     logging.info("extracting labels")
     extract_labels(input_folder=labels_directory, output_folder="data/")
     labels_df = pd.read_json("data/labels.json", lines=True)
-    cols = ["hash", "exploitability", "exploit_code_maturity", "exploit_url", "exploit_evidence"]
+    cols = [
+        "hash",
+        "exploitability",
+        "exploit_code_maturity",
+        "exploit_url",
+        "exploit_evidence",
+    ]
     labels_df = labels_df[cols]
     logging.info(f"Loaded {len(labels_df)} rows from the labels directory.")
     logging.info(labels_df.head())
@@ -324,7 +368,9 @@ def main(
 
     # labels_df.to_csv("test.csv")
     final_merged_df = pd.merge(merged_df, labels_df, on="hash", how="left")
-    final_merged_df["exploitability"] = final_merged_df["exploitability"].apply(lambda x: 1 if x else 0)
+    final_merged_df["exploitability"] = final_merged_df["exploitability"].apply(
+        lambda x: 1 if x else 0
+    )
     logging.info("Final merged DataFrame created.")
     logging.info(f"Number of rows: {final_merged_df.shape[0]}")
     logging.info("Final merged DataFrame head:")
@@ -338,7 +384,9 @@ def main(
 
 if __name__ == "__main__":
     # figure out correct pathing later
-    exploit_data_directory = "data/copy20221006/files/train_19700101_20210401/exploits_text"
+    exploit_data_directory = (
+        "data/copy20221006/files/train_19700101_20210401/exploits_text"
+    )
     documents_path = "data/copy20221006/files/train_19700101_20210401/documents.json"
     labels_directory = "data/copy20221006/documents/train_19700101_20210401"
     export_path = "data/data"

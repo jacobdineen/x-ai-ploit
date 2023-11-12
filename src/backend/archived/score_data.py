@@ -11,7 +11,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 @timer
-def main(input_data_path: str, model_path: str, vectorizer_path: str, out_path: str) -> pd.DataFrame:
+def main(
+    input_data_path: str, model_path: str, vectorizer_path: str, out_path: str
+) -> pd.DataFrame:
     """
     Score input data using a saved model and vectorizer.
 
@@ -38,7 +40,9 @@ def main(input_data_path: str, model_path: str, vectorizer_path: str, out_path: 
     X = vectorizer.transform(data["strings"])
 
     # Predict scores using the loaded model
-    scores = model.predict_proba(X)[:, 1]  # Assuming binary classification and you want the probability of class 1
+    scores = model.predict_proba(X)[
+        :, 1
+    ]  # Assuming binary classification and you want the probability of class 1
 
     # Append the scores to the original input data
     data["score"] = scores
