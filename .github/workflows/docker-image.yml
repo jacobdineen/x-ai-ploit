@@ -2,8 +2,7 @@ name: Python Black Formatter and Docker Image CI
 
 on:
   push:
-    branches: [ '**' ]  # Triggers on push to any branch
-
+    branches: [ '**' ]
 jobs:
   format:
     runs-on: ubuntu-latest
