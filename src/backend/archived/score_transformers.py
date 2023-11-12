@@ -4,11 +4,7 @@ import logging
 import pandas as pd
 import torch
 from tqdm import tqdm
-from transformers import (
-    DistilBertForSequenceClassification,
-    DistilBertTokenizer,
-    pipeline,
-)
+from transformers import DistilBertForSequenceClassification, DistilBertTokenizer, pipeline
 
 logging.basicConfig(level=logging.INFO)
 

@@ -286,7 +286,14 @@ def merge_dataframes_on_column(df1: pd.DataFrame, df2: pd.DataFrame, column_name
     return merged_df if not merged_df.empty else pd.DataFrame()
 
 
-def main(exploit_data_directory: str, documents_path: str, labels_directory: str, export_path: str):
+def main(
+    exploit_data_directory: str,
+    documents_path: str,
+    labels_directory: str,
+    export_path: str,
+    export_path_documents: str,
+    export_path_labels: str,
+):
     # Extracting exploit data and loading it into a DataFrame
     exploit_data = extract_exploit_data(exploit_data_directory)
     exploit_df = pd.DataFrame(exploit_data)
@@ -297,10 +304,13 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
     logging.info("Documents loaded into DataFrame.")
     logging.info(f"Number of rows: {documents_df.shape[0]}")
 
-    # Merging the two DataFrames on the "hash" and "filename" columns
+    # Merging the two DataFrames on "hash"
+    # This is raw documents
     merged_df = merge_dataframes_on_column(documents_df, exploit_df, column_name="hash")
     logging.info("Merged DataFrame created.")
     logging.info(f"Number of rows: {merged_df.shape[0]}")
+    merged_df.to_csv(f"{export_path_documents}.csv")
+    logging.info(f"documents DataFrame saved to {export_path_documents}.")
 
     logging.info("extracting labels")
     extract_labels(input_folder=labels_directory, output_folder="data/")
@@ -309,6 +319,9 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
     labels_df = labels_df[cols]
     logging.info(f"Loaded {len(labels_df)} rows from the labels directory.")
     logging.info(labels_df.head())
+    labels_df.to_csv(f"{export_path_labels}.csv")
+    logging.info(f"labels DataFrame saved to {export_path_labels}.")
+
     # labels_df.to_csv("test.csv")
     final_merged_df = pd.merge(merged_df, labels_df, on="hash", how="left")
     final_merged_df["exploitability"] = final_merged_df["exploitability"].apply(lambda x: 1 if x else 0)
@@ -320,7 +333,7 @@ def main(exploit_data_directory: str, documents_path: str, labels_directory: str
     # we get very few hash matches to anything other than vulner?
     print(final_merged_df["exploitability"].value_counts())
     final_merged_df.to_csv(f"{export_path}.csv")
-    logging.info("Final merged DataFrame saved to CSV file.")
+    logging.info(f"Final merged DataFrame saved to {export_path}.")
 
 
 if __name__ == "__main__":
@@ -329,9 +342,16 @@ if __name__ == "__main__":
     documents_path = "data/copy20221006/files/train_19700101_20210401/documents.json"
     labels_directory = "data/copy20221006/documents/train_19700101_20210401"
     export_path = "data/data"
+    export_path_documents = "data/documents"
+    export_path_labels = "data/labels"
     main(
         exploit_data_directory=exploit_data_directory,
         documents_path=documents_path,
         labels_directory=labels_directory,
         export_path=export_path,
+        export_path_documents=export_path_documents,
+        export_path_labels=export_path_labels,
     )
+
+# This gives us the ground truth matches between the documents and the exploitability labels
+# but it doesn't match everything

@@ -1,18 +1,12 @@
 # -*- coding: utf-8 -*-
 import logging
 
+# pylintL
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from tqdm import tqdm
-from transformers import (
-    AdamW,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    LlamaForSequenceClassification,
-    LlamaTokenizer,
-    get_linear_schedule_with_warmup,
-)
+from transformers import AdamW, AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 from utils import preprocess_comment, preprocess_data
 
 logging.basicConfig(level=logging.INFO)
