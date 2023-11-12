@@ -72,7 +72,8 @@ if __name__ == "__main__":
 
         # Now filter the DataFrame to get rows where both columns have empty lists
         filtered_df = df[
-            (df["cveids_db"].map(lambda d: len(d) == 0)) & (df["cveids_explicit"].map(lambda d: len(d) == 0))
+            (df["cveids_db"].map(lambda d: len(d) == 0))
+            & (df["cveids_explicit"].map(lambda d: len(d) == 0))
         ]
         filtered_df.to_csv(output_cveless_csv, index=False)
         logging.info(f"cve-less df saved to {output_cveless_csv}")
