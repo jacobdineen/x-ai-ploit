@@ -18,7 +18,9 @@ def read_and_preprocess(file_path, nrows=None):
 
 
 def create_mappings(flat_df):
-    cveid_to_index = {cveid: idx for idx, cveid in enumerate(flat_df["cveids_explicit"].unique())}
+    cveid_to_index = {
+        cveid: idx for idx, cveid in enumerate(flat_df["cveids_explicit"].unique())
+    }
     hash_to_index = {hash_: idx for idx, hash_ in enumerate(flat_df["hash"].unique())}
     return cveid_to_index, hash_to_index
 
@@ -51,7 +53,9 @@ if __name__ == "__main__":
     flat_df = read_and_preprocess(file_path, nrows=10)
 
     cveid_to_index, hash_to_index = create_mappings(flat_df)
-    index_to_cveid, index_to_hash = create_inverse_mappings(cveid_to_index, hash_to_index)
+    index_to_cveid, index_to_hash = create_inverse_mappings(
+        cveid_to_index, hash_to_index
+    )
 
     adj_matrix = create_adjacency_matrix(flat_df, cveid_to_index, hash_to_index)
 
