@@ -4,7 +4,6 @@ on:
   push:
     branches: [ '**' ]  # Triggers on push to any branch
 
-
 jobs:
   format:
     runs-on: ubuntu-latest
