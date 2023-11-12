@@ -10,13 +10,11 @@ RUN apt-get update && apt-get install -y \
     git \
     sudo \
     python3-pip \
-    python3-dev
+    python3-dev \
+    python3-pip && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
 COPY docker_requirements.txt .
-
-# Install Python3 and Pip
-RUN apt-get install -y python3-pip
 
 # Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
