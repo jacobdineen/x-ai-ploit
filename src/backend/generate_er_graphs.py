@@ -2,7 +2,6 @@
 """
 module to take in a csv file of CVE documents and generate an ER graph
 in the form of a sparse adjacency matrix
-
 Includes helper funcs to create mappings between CVE IDs and hashes
 """
 import numpy as np
