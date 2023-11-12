@@ -29,13 +29,14 @@ RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/wh
 
 # Copy the rest of the application code into the container
 COPY . .
+RUN ls -al .
 
 # Install ZSH plugins
-RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
-    -t robbyrussell \
-    -p git \
-    -p https://github.com/zsh-users/zsh-autosuggestions \
-    -p https://github.com/zsh-users/zsh-syntax-highlighting \
-    -p https://github.com/zsh-users/zsh-completions
+# RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
+#     -t robbyrussell \
+#     -p git \
+#     -p https://github.com/zsh-users/zsh-autosuggestions \
+#     -p https://github.com/zsh-users/zsh-syntax-highlighting \
+#     -p https://github.com/zsh-users/zsh-completions
 
 CMD ["python3", "app.py"]
