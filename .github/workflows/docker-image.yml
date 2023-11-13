@@ -45,7 +45,7 @@ jobs:
       run: pip install pylint==3.0.0a4
 
     - name: Run Pylint
-      run: pylint --max-line-length=120 --ignore-imports=yes -d duplicate-code .
+      run: pylint --max-line-length=120 --ignore-imports=yes -d duplicate-code $(git ls-files '*.py')
 
   build:
     runs-on: ubuntu-latest
