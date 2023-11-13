@@ -32,9 +32,7 @@ def main():
     logging.info("model and tokenizer loaded")
 
     # Setup the classification pipeline
-    device = (
-        0 if torch.cuda.is_available() else -1
-    )  # 0 represents the first GPU; -1 represents the CPU.
+    device = 0 if torch.cuda.is_available() else -1  # 0 represents the first GPU; -1 represents the CPU.
     logging.info(f"device: {device}")
     classification_pipeline = pipeline(
         "text-classification",

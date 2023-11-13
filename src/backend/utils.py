@@ -45,9 +45,7 @@ def preprocess_comment(comment):
 
 def preprocess_data(data):
     # Convert 'True' to 1 and any other value (including NaN) to 0
-    data["exploitability"] = data["exploitability"].apply(
-        lambda x: 1 if x is True else 0
-    )
+    data["exploitability"] = data["exploitability"].apply(lambda x: 1 if x is True else 0)
     return data
 
 
