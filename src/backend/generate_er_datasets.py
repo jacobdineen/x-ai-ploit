@@ -54,13 +54,22 @@ def get_tagged_and_untagged_documents(directory: str, output_csv: str):
                     data.to_csv(output_csv, mode="a", index=False, header=False)
 
 
-if __name__ == "__main__":
-    directory = "/home/jdineen/Documents/xaiploit/data/copy20221006/documents/train_19700101_20210401"
-    output_csv = "data/test.csv"
-    output_cveless_csv = "data/cveless_docs.csv"
-    output_cve_csv = "data/cve_docs.csv"
-    regen_data = False
+def main(directory: str, output_csv: str, output_cve_csv: str, output_cveless_csv: str, regen_data: bool = False):
+    """
+    Grab all documents from a directory of JSON files and write them to a CSV file.
+    Then Grab only documents that have no CVEs in either the cveids_db or cveids_explicit columns.
+    Used for entity recognition task
 
+    Args:
+        directory (str): Path to directory containing JSON files
+        output_csv (str): Path to output CSV file
+        output_cve_csv (str): Path to output CSV file containing only documents with CVEs
+        output_cveless_csv (str): Path to output CSV file containing only documents without CVEs
+        regen_data (bool, optional): Whether to regenerate the CSV files. Defaults to False.
+
+    Returns:
+        None
+    """
     if regen_data:
         get_tagged_and_untagged_documents(directory, output_csv)
         logging.info(f"all docs saved to {output_csv}")
@@ -102,3 +111,13 @@ if __name__ == "__main__":
     """
     )
     logging.info(cves.head())
+
+
+if __name__ == "__main__":
+    directory = "/home/jdineen/Documents/xaiploit/data/copy20221006/documents/train_19700101_20210401"
+    output_csv = "data/test.csv"
+    output_cveless_csv = "data/cveless_docs.csv"
+    output_cve_csv = "data/cve_docs.csv"
+    regen_data = False
+
+    main(directory, output_csv, output_cve_csv, output_cveless_csv, regen_data)
