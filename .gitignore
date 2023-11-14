@@ -12,3 +12,5 @@ frontend/build
 *.pyc
 /__pycache__/
 /data
+src/backend/xaiploit.egg-info/
+xaiploit.egg-info/

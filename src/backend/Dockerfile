@@ -14,7 +14,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
-COPY docker_requirements.txt .
+COPY src/backend .
+COPY setup.py .
+RUN ls -al .
+
 
 # Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
@@ -26,7 +29,7 @@ RUN python3 -m pip install --upgrade pip
 RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu111/torch_stable.html
 
 # Copy the rest of the application code into the container
-COPY . .
+RUN pip3 install -e .
 RUN ls -al .
 
 # Install ZSH plugins

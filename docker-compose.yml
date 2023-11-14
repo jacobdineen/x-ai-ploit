@@ -1,12 +1,16 @@
 version: '3'
 services:
   frontend:
-    build: ./src/frontend
+    build:
+      context: .
+      dockerfile: src/frontend/Dockerfile
     ports: ["3000:3000"]
     networks:
       - custom_network
   backend:
-    build: ./src/backend
+    build:
+      context: .
+      dockerfile: src/backend/Dockerfile
     ports: ["3001:3001"]
     networks:
       - custom_network
