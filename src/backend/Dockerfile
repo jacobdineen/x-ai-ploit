@@ -22,4 +22,4 @@ RUN pip3 install -e .
 # Set the working directory to where your main application code is
 WORKDIR /app/src/backend
 
-CMD ["python3", "your_script.py"]
+CMD ["python3", "app.py"]
