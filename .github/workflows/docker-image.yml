@@ -52,6 +52,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Integration test to make sure docker compose is not broken
-        id: docker_tag
-        run: docker compose down && docker compose build && docker compose up --build -d && docker image prune -f
+      - name: Start services with Docker Compose
+        run: docker compose up --build -d
+
+      - name: Run tests
+        run: docker compose exec backend pytest
+
+      - name: Stop and Clean Up
+        run: docker compose down && docker image prune -f

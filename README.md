@@ -9,6 +9,7 @@ pre-commit install
 # starting
 
 #### Launch Application
+`docker context use default`
 ```bash
 # launch backend
 docker build -t xaiploit -f src/backend/Dockerfile .
@@ -21,5 +22,6 @@ docker build -t xaiploit -f src/frontend/Dockerfile .
 
 ```bash
 # launch backend and frontend
+
 docker compose down && docker compose build && docker compose up --build -d && docker image prune -f
 ```
