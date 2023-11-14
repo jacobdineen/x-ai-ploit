@@ -52,11 +52,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Build Docker Image
+        run: docker compose build
+
       - name: Start services with Docker Compose
-        run: docker compose up --build -d
+        run: docker compose up -d
 
       - name: Run tests
-        run: docker run xaiploit-backend:latest pytest
+        run: docker compose exec backend pytest
 
       - name: Stop and Clean Up
-        run: docker compose down && docker image prune -f
+        run: docker compose down
