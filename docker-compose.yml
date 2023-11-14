@@ -11,6 +11,7 @@ services:
     build:
       context: .
       dockerfile: src/backend/Dockerfile
+    image: xaiploit-backend:latest
     ports: ["3001:3001"]
     networks:
       - custom_network
