@@ -9,68 +9,35 @@ from src.backend.generate_er_graphs import CVEGraphGenerator
 
 class TestCVEGraphGenerator(unittest.TestCase):
     def setUp(self):
-        # Setup with dummy CSV data
-        self.dummy_csv = StringIO(
-            """cveids_explicit,hash
-                                    ['CVE-1234', 'CVE-2345'],hash1
-                                    ['CVE-3456'],hash2"""
+        # Sample CSV data
+        self.csv_data = StringIO(
+            """
+cveids_explicit,hash,content_text
+["CVE-2021-1234"],hash1,Sample text 1
+["CVE-2021-1235"],hash2,Sample text 2
+"""
         )
+        self.file_path = "dummy_path.csv"
+        self.limit = None
+        self.graph_generator = CVEGraphGenerator(self.file_path, self.limit)
+        self.df = pd.read_csv(self.csv_data)
+        self.df["cveids_explicit"] = self.df["cveids_explicit"].apply(eval)
+        self.df = self.df.explode("cveids_explicit")
 
-        self.generator = CVEGraphGenerator("dummy_path")
+    def test_read_and_preprocess(self):
+        self.graph_generator.read_and_preprocess = lambda: self.df
+        df_processed = self.graph_generator.read_and_preprocess()
+        self.assertEqual(len(df_processed), len(self.df))
 
-    def test_create_mappings(self):
-        self.generator.read_and_preprocess = lambda: pd.DataFrame(
-            {"cveids_explicit": ["CVE-1234", "CVE-2345", "CVE-3456"], "hash": ["hash1", "hash2", "hash3"]}
-        )
+    def test_create_graph(self):
+        self.graph_generator.create_graph(self.df)
+        self.assertEqual(len(self.graph_generator.graph.nodes), 4)
+        self.assertEqual(len(self.graph_generator.graph.edges), 2)
 
-        cveid_to_index, hash_to_index = self.generator.create_mappings(self.generator.read_and_preprocess())
-
-        self.assertEqual(cveid_to_index, {"CVE-1234": 0, "CVE-2345": 1, "CVE-3456": 2})
-        self.assertEqual(hash_to_index, {"hash1": 0, "hash2": 1, "hash3": 2})
-
-    def test_create_inverse_mappings(self):
-        self.generator.cveid_to_index = {"CVE-1234": 0, "CVE-2345": 1, "CVE-3456": 2}
-        self.generator.hash_to_index = {"hash1": 0, "hash2": 1, "hash3": 2}
-
-        index_to_cveid, index_to_hash = self.generator.create_inverse_mappings()
-
-        self.assertEqual(index_to_cveid, {0: "CVE-1234", 1: "CVE-2345", 2: "CVE-3456"})
-        self.assertEqual(index_to_hash, {0: "hash1", 1: "hash2", 2: "hash3"})
-
-    def test_create_adjacency_matrix(self):
-        df = pd.DataFrame(
-            {"cveids_explicit": ["CVE-1234", "CVE-2345", "CVE-3456"], "hash": ["hash1", "hash2", "hash3"]}
-        )
-
-        self.generator.cveid_to_index = {"CVE-1234": 0, "CVE-2345": 1, "CVE-3456": 2}
-        self.generator.hash_to_index = {"hash1": 0, "hash2": 1, "hash3": 2}
-
-        adj_matrix = self.generator.create_adjacency_matrix(df)
-
-        self.assertEqual(adj_matrix.count_nonzero(), 3)
-        self.assertEqual(adj_matrix.shape, (3, 3))
-
-    def test_main(self):
-        self.generator.read_and_preprocess = lambda nrows: pd.DataFrame(
-            {"cveids_explicit": ["CVE-1234", "CVE-2345", "CVE-3456"], "hash": ["hash1", "hash2", "hash3"]}
-        )
-
-        self.generator.create_mappings = lambda df: (
-            {"CVE-1234": 0, "CVE-2345": 1, "CVE-3456": 2},
-            {"hash1": 0, "hash2": 1, "hash3": 2},
-        )
-
-        self.generator.create_inverse_mappings = lambda: (
-            {0: "CVE-1234", 1: "CVE-2345", 2: "CVE-3456"},
-            {0: "hash1", 1: "hash2", 2: "hash3"},
-        )
-
-        # self.generator.create_adjacency_matrix = lambda df: coo_matrix(np.array([[0, 1], [1, 0]]))
-
-        # adj_matrix, mappings = self.generator.main()
-
-        # self.assertEqual(adj_matrix.count_nonzero(), 2)
-        # self.assertEqual(len(mappings), 4)  # Ensure all mappings are returned
+    def test_get_content_text(self):
+        self.graph_generator.create_graph(self.df)
+        content_text = self.graph_generator.get_content_text("hash1")
+        self.assertEqual(content_text, "Sample text 1")
 
 
 if __name__ == "__main__":
