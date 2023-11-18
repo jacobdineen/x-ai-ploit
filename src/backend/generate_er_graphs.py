@@ -2,9 +2,15 @@
 import argparse
 import logging
 import pickle
+import re
+import sys
 
 import networkx as nx
+import nltk
 import pandas as pd
+from networkx.algorithms import bipartite
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
@@ -35,6 +41,38 @@ class CVEGraphGenerator:
         self.limit = limit
         self.graph = nx.Graph()
         self.cveid_col = "cveids_explicit"
+        self.vectorizer = None
+        nltk.download("stopwords")
+        nltk.download("wordnet")
+
+    def _is_graph_bipartite(self) -> bool:
+        """
+        Check if the graph is bipartite.
+
+        Returns:
+            bool: True if the graph is bipartite, False otherwise.
+        """
+        return bipartite.is_bipartite(self.graph)
+
+    def preprocess_text(self, text):
+        """
+        Preprocess the given text by converting to lowercase, removing irrelevant characters,
+        removing stopwords, and performing lemmatization.
+
+        Args:
+            text (str): The text to preprocess.
+
+        Returns:
+            str: The preprocessed text.
+        """
+        text = text.lower()
+        text = re.sub(r"[^a-zA-Z\s]", "", text, re.I | re.A)
+        tokens = text.split()
+        stop_words = set(stopwords.words("english"))
+        tokens = [word for word in tokens if word not in stop_words]
+        lemmatizer = WordNetLemmatizer()
+        tokens = [lemmatizer.lemmatize(word) for word in tokens]
+        return " ".join(tokens)
 
     def read_and_preprocess(self) -> pd.DataFrame:
         """
@@ -51,13 +89,13 @@ class CVEGraphGenerator:
             df = df.explode(self.cveid_col)
         except Exception as e:
             logging.error(f"Error reading or processing the file: {e}")
+        df["content_text"] = df["content_text"].apply(self.preprocess_text)
         return df
 
     def vectorize_text(self, df: pd.DataFrame):
         logging.info("Vectorizing text data...")
-        vectorizer = TfidfVectorizer()  # or any other chosen vectorizer
-        # Assuming 'content_text' column contains the text
-        vectors = vectorizer.fit_transform(df["content_text"].values.astype("U"))
+        vectorizer = TfidfVectorizer(max_features=10000, min_df=2, ngram_range=(1, 1))
+        vectors = vectorizer.fit_transform(df["content_text"])
         return vectors, vectorizer
 
     def create_graph(self, df: pd.DataFrame, vectors) -> None:
@@ -85,6 +123,15 @@ class CVEGraphGenerator:
             self.graph.add_edge(cve_id, hash_)
         logging.info(f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges.")
 
+        is_bipartite = self._is_graph_bipartite()
+        if is_bipartite:
+            logging.info("Graph is bipartite.")
+        else:
+            logging.warning("Graph is not bipartite.")
+            logging.warning("Graph will not be saved.")
+            logging.warning("Exiting...")
+            sys.exit(1)
+
     def get_content_text(self, hash_) -> str:
         """
         Retrieve the content text for a given hash.
@@ -106,31 +153,31 @@ class CVEGraphGenerator:
         """
         return nx.adjacency_matrix(self.graph)
 
-    def write_graph(self, path) -> None:
+    def write_graph(self, path, vectorizer) -> None:
         """
-        Write the graph to a file.
+        Write the graph and the vectorizer to a file.
 
         Args:
-            path: The path to write the graph to.
+            path: The path to write the graph and vectorizer to.
+            vectorizer: The TfidfVectorizer object used for text vectorization.
         """
         with open(path, "wb") as f:
-            pickle.dump(self.graph, f)
+            pickle.dump((self.graph, vectorizer), f)
 
     def load_graph(self, path) -> None:
         """
-        Load a graph from a file.
+        Load a graph and vectorizer from a file.
 
         Args:
-            path: The path to load the graph from.
+            path: The path to load the graph and vectorizer from.
         """
         with open(path, "rb") as f:
-            self.graph = pickle.load(f)
+            self.graph, self.vectorizer = pickle.load(f)
 
 
-# Reweite the below func with docstrings
 def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
     """
-    run the graph generator.
+    Run the graph generator.
 
     Args:
         read_path: The path to the CSV file containing CVE data.
@@ -140,25 +187,21 @@ def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
     Returns:
         None
     """
-    # Initialize the generator with arguments
     generator = CVEGraphGenerator(read_path, limit=limit)
     df = generator.read_and_preprocess()
-    vectors, _ = generator.vectorize_text(df)
+    vectors, vectorizer = generator.vectorize_text(df)
     generator.create_graph(df, vectors)
-    generator.write_graph(graph_save_path)
-    logging.info(f"Graph saved to {graph_save_path}")
+    generator.write_graph(graph_save_path, vectorizer)
+    logging.info(f"Graph and vectorizer saved to {graph_save_path}")
 
 
 if __name__ == "__main__":
-    # Set up argument parsing
     parser = argparse.ArgumentParser(description="Generate a graph from CVE data.")
     parser.add_argument(
         "--read_path", type=str, default="data/cve_docs.csv", help="Path to the CSV file containing CVE data."
     )
     parser.add_argument("--graph_save_path", type=str, default="data/graph.pkl", help="Path to the nx graph to")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of rows to read from the CSV file.")
-
-    # Parse the arguments
     args = parser.parse_args()
 
     main(read_path=args.read_path, graph_save_path=args.graph_save_path, limit=args.limit)
