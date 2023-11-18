@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
+import pickle
 
 import networkx as nx
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
@@ -51,7 +53,14 @@ class CVEGraphGenerator:
             logging.error(f"Error reading or processing the file: {e}")
         return df
 
-    def create_graph(self, df: pd.DataFrame) -> None:
+    def vectorize_text(self, df: pd.DataFrame):
+        logging.info("Vectorizing text data...")
+        vectorizer = TfidfVectorizer()  # or any other chosen vectorizer
+        # Assuming 'content_text' column contains the text
+        vectors = vectorizer.fit_transform(df["content_text"].values.astype("U"))
+        return vectors, vectorizer
+
+    def create_graph(self, df: pd.DataFrame, vectors) -> None:
         """
         create a graph from the dataframe.
 
@@ -61,19 +70,20 @@ class CVEGraphGenerator:
         Returns:
             None
         """
-        logging.info("Creating the graph...")
-        for _, row in tqdm(df.iterrows()):
+        logging.info("Creating the graph with vectorized text...")
+        for index, row in tqdm(df.iterrows()):
             cve_id = row["cveids_explicit"]
             hash_ = row["hash"]
-            content_text = row["content_text"]
 
             if cve_id not in self.graph:
                 self.graph.add_node(cve_id)
 
             if hash_ not in self.graph:
-                self.graph.add_node(hash_, content_text=content_text)
+                vector = vectors[index].toarray()[0]  # Convert sparse matrix row to dense array
+                self.graph.add_node(hash_, vector=vector)
 
             self.graph.add_edge(cve_id, hash_)
+        logging.info(f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges.")
 
     def get_content_text(self, hash_) -> str:
         """
@@ -103,7 +113,8 @@ class CVEGraphGenerator:
         Args:
             path: The path to write the graph to.
         """
-        nx.write_gml(self.graph, path)
+        with open(path, "wb") as f:
+            pickle.dump(self.graph, f)
 
     def load_graph(self, path) -> None:
         """
@@ -112,7 +123,8 @@ class CVEGraphGenerator:
         Args:
             path: The path to load the graph from.
         """
-        self.graph = nx.read_gml(path)
+        with open(path, "rb") as f:
+            self.graph = pickle.load(f)
 
 
 # Reweite the below func with docstrings
@@ -131,7 +143,8 @@ def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
     # Initialize the generator with arguments
     generator = CVEGraphGenerator(read_path, limit=limit)
     df = generator.read_and_preprocess()
-    generator.create_graph(df)
+    vectors, _ = generator.vectorize_text(df)
+    generator.create_graph(df, vectors)
     generator.write_graph(graph_save_path)
     logging.info(f"Graph saved to {graph_save_path}")
 
@@ -142,7 +155,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--read_path", type=str, default="data/cve_docs.csv", help="Path to the CSV file containing CVE data."
     )
-    parser.add_argument("--graph_save_path", type=str, default="data/test.gml", help="Path to the nx graph to")
+    parser.add_argument("--graph_save_path", type=str, default="data/graph.pkl", help="Path to the nx graph to")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of rows to read from the CSV file.")
 
     # Parse the arguments
