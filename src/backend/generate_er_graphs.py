@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 
 
 class CVEGraphGenerator:
-    """ 
+    """
     Class to take an input dataframe and generate a graph from it.
     The graph is a networkx graph with CVEs as nodes and hashes as nodes.
     The edges are created between CVEs and hashes if the CVE and hash are connected.
@@ -27,19 +27,20 @@ class CVEGraphGenerator:
         cveid_col: The name of the column containing CVE IDs.
 
     """
+
     def __init__(self, file_path, limit=None):
         self.file_path = file_path
         self.limit = limit
         self.graph = nx.Graph()
         self.cveid_col = "cveids_explicit"
 
-    def read_and_preprocess(self)->pd.DataFrame:
-        """ 
+    def read_and_preprocess(self) -> pd.DataFrame:
+        """
         read a csv file and preprocess it.
-        
+
         Returns:
             df: a pandas DataFrame containing the data from the CSV file
-        
+
         """
         logging.info("Reading and preprocessing the file...")
         df = pd.read_csv(self.file_path, nrows=self.limit)
@@ -50,8 +51,8 @@ class CVEGraphGenerator:
             logging.error(f"Error reading or processing the file: {e}")
         return df
 
-    def create_graph(self, df: pd.DataFrame)-> None:
-        """ 
+    def create_graph(self, df: pd.DataFrame) -> None:
+        """
         create a graph from the dataframe.
 
         Args:
@@ -74,7 +75,7 @@ class CVEGraphGenerator:
 
             self.graph.add_edge(cve_id, hash_)
 
-    def get_content_text(self, hash_)-> str:
+    def get_content_text(self, hash_) -> str:
         """
         Retrieve the content text for a given hash.
 
@@ -86,7 +87,7 @@ class CVEGraphGenerator:
         """
         return self.graph.nodes[hash_].get("content_text", None)
 
-    def get_adjacency_matrix(self)-> nx.adjacency_matrix:
+    def get_adjacency_matrix(self) -> nx.adjacency_matrix:
         """
         Create and return the adjacency matrix of the graph.
 
@@ -95,7 +96,7 @@ class CVEGraphGenerator:
         """
         return nx.adjacency_matrix(self.graph)
 
-    def write_graph(self, path)-> None:
+    def write_graph(self, path) -> None:
         """
         Write the graph to a file.
 
@@ -104,7 +105,7 @@ class CVEGraphGenerator:
         """
         nx.write_gml(self.graph, path)
 
-    def load_graph(self, path)-> None:
+    def load_graph(self, path) -> None:
         """
         Load a graph from a file.
 
@@ -113,9 +114,10 @@ class CVEGraphGenerator:
         """
         self.graph = nx.read_gml(path)
 
+
 # Reweite the below func with docstrings
-def main(read_path:str, graph_save_path:str, limit:int=None)-> None:
-    """  
+def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
+    """
     run the graph generator.
 
     Args:
@@ -132,7 +134,6 @@ def main(read_path:str, graph_save_path:str, limit:int=None)-> None:
     generator.create_graph(df)
     generator.write_graph(graph_save_path)
     logging.info(f"Graph saved to {graph_save_path}")
-    
 
 
 if __name__ == "__main__":
