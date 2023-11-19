@@ -99,6 +99,7 @@ def prepare_data(file_path: str) -> Tuple[Any, int]:
                         The prepared data is a torch_geometric Data object with node features and edge indices.
                         The number of features is an integer representing the size of the feature vector for each node.
     """
+    logging.info("Loading graph data...")
     generator = CVEGraphGenerator(file_path=file_path)
     generator.load_graph("data/graph.pkl")
     graph = generator.graph
