@@ -58,6 +58,12 @@ jobs:
       - name: Start services with Docker Compose
         run: docker compose up -d
 
+      - name: Check services status
+        run: docker compose ps
+
+      - name: View backend logs
+        run: docker logs [backend-container-name]
+
       - name: Run tests
         run: docker compose exec backend pytest
 
