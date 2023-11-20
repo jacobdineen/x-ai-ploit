@@ -100,8 +100,8 @@ def prepare_data(file_path: str) -> Tuple[Any, int]:
                         The number of features is an integer representing the size of the feature vector for each node.
     """
     logging.info("Loading graph data...")
-    generator = CVEGraphGenerator(file_path=file_path)
-    generator.load_graph("data/graph.pkl")
+    generator = CVEGraphGenerator(file_path="")
+    generator.load_graph(file_path)
     graph = generator.graph
     num_features = len(generator.vectorizer.get_feature_names_out())
 
@@ -135,37 +135,27 @@ def main(
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.BCEWithLogitsLoss()
 
-    metrics = {
-        "train": {"loss": [], "accuracy": [], "precision": [], "recall": [], "f1": [], "aucroc": []},
-        "val": {"loss": [], "accuracy": [], "precision": [], "recall": [], "f1": [], "aucroc": []},
-    }
+    metric_keys = ["loss", "accuracy", "precision", "recall", "f1", "aucroc"]
+    metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
 
     for epoch in tqdm(range(num_epochs)):
-        train_loss, train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
-        val_loss, val_metrics = eval_epoch(model, val_data, criterion, device)
+        train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
+        val_metrics = eval_epoch(model, val_data, criterion, device)
 
-        # Update training metrics for the epoch
-        metrics["train"]["loss"].append(train_loss)
-        metrics["train"]["accuracy"].append(train_metrics[0])
-        metrics["train"]["precision"].append(train_metrics[1])
-        metrics["train"]["recall"].append(train_metrics[2])
-        metrics["train"]["f1"].append(train_metrics[3])
-        metrics["train"]["aucroc"].append(train_metrics[4])
+        epoch_metrics = {
+            "train": [train_metrics.loss] + list(train_metrics.other_metrics),
+            "val": [val_metrics.loss] + list(val_metrics.other_metrics),
+        }
 
-        # Update validation metrics for the epoch
-        metrics["val"]["loss"].append(val_loss)
-        metrics["val"]["accuracy"].append(val_metrics[0])
-        metrics["val"]["precision"].append(val_metrics[1])
-        metrics["val"]["recall"].append(val_metrics[2])
-        metrics["val"]["f1"].append(val_metrics[3])
-        metrics["val"]["aucroc"].append(val_metrics[4])
+        for phase in ["train", "val"]:
+            for key, value in zip(metric_keys, epoch_metrics[phase]):
+                metrics[phase][key].append(value)
 
-        # Logging metrics for the epoch
         logging.info(f"Epoch {epoch+1}:")
-        logging.info(f"Train Loss: {train_loss:.4f}")
-        logging.info(f"Val Loss: {val_loss:.4f}")
-        logging.info(f"Train Accuracy: {train_metrics[0]:.4f}")
-        logging.info(f"Val Accuracy: {val_metrics[0]:.4f}")
+        logging.info(f"Train Loss: {train_metrics.loss:.4f} - Val Loss: {val_metrics.loss:.4f}")
+        logging.info(
+            f"Train Accuracy: {train_metrics.other_metrics[0]:.4f} - Val Accuracy: {val_metrics.other_metrics[0]:.4f}"
+        )
 
     plt.figure(figsize=(10, 6))
     plt.plot(metrics["train"]["loss"], label="Training Loss")
