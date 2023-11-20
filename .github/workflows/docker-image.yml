@@ -65,7 +65,7 @@ jobs:
         run: docker logs backend
 
       - name: Run tests
-        run: docker compose exec backend pytest
+        run: docker exec xaiploit-backend-1 pytest
 
       - name: Stop and Clean Up
         run: docker compose down
