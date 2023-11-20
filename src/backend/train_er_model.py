@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Module to train a graph convolutional network (GCN) model on a given graph dataset.
+
+"""
 import argparse
 import logging
 from typing import Any, Tuple

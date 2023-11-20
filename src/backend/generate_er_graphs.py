@@ -1,4 +1,10 @@
-# -*- coding: utf-8 -*-
+"""
+Generate a graph from CVE data.
+Add edges between CVEs and hashes, vectorize
+the text, and save the graph, node attributes, and vectorizer.
+To be used for downstream tasks such as training a graph convolutional network (GCN).
+
+"""
 import argparse
 import logging
 import pickle
