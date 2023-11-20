@@ -62,7 +62,7 @@ jobs:
         run: docker compose ps
 
       - name: View backend logs
-        run: docker logs backend
+        run: docker logs xaiploit-backend-1
 
       - name: Run tests
         run: docker exec xaiploit-backend-1 pytest
