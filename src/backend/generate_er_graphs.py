@@ -6,6 +6,7 @@ import sys
 
 import networkx as nx
 import nltk
+import numpy as np
 import pandas as pd
 from networkx.algorithms import bipartite
 from nltk.corpus import stopwords
@@ -51,6 +52,7 @@ class CVEGraphGenerator:
         Returns:
             bool: True if the graph is bipartite, False otherwise.
         """
+        logging.info("Checking if graph is bipartite...")
         return bipartite.is_bipartite(self.graph)
 
     def preprocess_text_series(self, texts):
@@ -111,12 +113,13 @@ class CVEGraphGenerator:
         vectors = vectorizer.fit_transform(df["content_text"])
         return vectors, vectorizer
 
-    def create_graph(self, df: pd.DataFrame, vectors) -> None:
+    def create_graph(self, df: pd.DataFrame, vectors: dict) -> None:
         """
         Create a graph from the dataframe.
 
         Args:
             df: a pandas DataFrame containing the data from the CSV file
+            vectors: dict of node attributes
 
         Returns:
             None
@@ -126,10 +129,20 @@ class CVEGraphGenerator:
         cve_node_count = 0
         hash_node_count = 0
         multi_edge_node_count = 0
+        skipped_cves = 0
+        skipped_hash = 0
 
         for index, row in tqdm(df.iterrows()):
             cve_id = row["cveids_explicit"]
             hash_ = row["hash"]
+
+            if pd.isna(cve_id):
+                skipped_cves += 1
+                continue
+
+            if pd.isna(hash_):
+                skipped_hash += 1
+                continue
 
             if cve_id not in self.graph:
                 self.graph.add_node(cve_id)
@@ -148,6 +161,8 @@ class CVEGraphGenerator:
                 multi_edge_node_count += 1
 
         logging.info(f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges.")
+        logging.info(f"Number of skipped CVEs: {skipped_cves}")
+        logging.info(f"Number of skipped hashes: {skipped_hash}")
         logging.info(f"Number of CVE nodes: {cve_node_count}")
         logging.info(f"Number of hash nodes: {hash_node_count}")
         logging.info(f"Number of nodes with more than one edge: {multi_edge_node_count}")
@@ -182,29 +197,60 @@ class CVEGraphGenerator:
         """
         return nx.adjacency_matrix(self.graph)
 
-    def write_graph(self, path, vectorizer) -> None:
+    def write_graph(self, graph_path, attributes_path, vectorizer_path) -> None:
         """
-        Write the graph and the vectorizer to a file.
+        Write the graph, node attributes, and vectorizer to separate files.
 
         Args:
-            path: The path to write the graph and vectorizer to.
-            vectorizer: The TfidfVectorizer object used for text vectorization.
+            graph_path: The path to write the graph structure to.
+            attributes_path: The path to write the node attributes to.
+            vectorizer_path: The path to write the vectorizer to.
         """
-        with open(path, "wb") as f:
-            pickle.dump((self.graph, vectorizer), f)
+        logging.info(f"Writing graph structure to {graph_path}...")
+        node_attributes = {}
 
-    def load_graph(self, path) -> None:
+        # Separate complex node attributes
+        for node, data in self.graph.nodes(data=True):
+            if "vector" in data:
+                node_attributes[node] = data.pop("vector")
+
+        # Write the graph structure
+        nx.write_gml(self.graph, graph_path)
+
+        # Save node attributes
+        logging.info(f"Writing node attributes to {attributes_path}...")
+        np.savez(attributes_path, **node_attributes)
+
+        # Save the vectorizer
+        logging.info(f"Writing vectorizer to {vectorizer_path}...")
+        with open(vectorizer_path, "wb") as f:
+            pickle.dump(self.vectorizer, f)
+
+    def load_graph(self, graph_path: str, attributes_path: str, vectorizer_path: str) -> None:
         """
-        Load a graph and vectorizer from a file.
+        Load a graph, node attributes, and vectorizer from files.
 
         Args:
-            path: The path to load the graph and vectorizer from.
+            graph_path: The path to load the graph structure from.
+            attributes_path: The path to load the node attributes from.
+            vectorizer_path: The path to load the vectorizer from.
         """
-        with open(path, "rb") as f:
-            self.graph, self.vectorizer = pickle.load(f)
+        logging.info(f"Loading graph structure from {graph_path}...")
+        self.graph = nx.read_gml(graph_path)
+
+        # Load node attributes
+        logging.info(f"Loading node attributes from {attributes_path}...")
+        with np.load(attributes_path) as data:
+            for node, vector in data.items():
+                self.graph.nodes[node]["vector"] = vector
+
+        # Load the vectorizer
+        logging.info(f"Loading vectorizer from {vectorizer_path}...")
+        with open(vectorizer_path, "rb") as f:
+            self.vectorizer = pickle.load(f)
 
 
-def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
+def main(read_path: str, graph_save_path: str, features_path: str, vectorizer_path: str, limit: int = None) -> None:
     """
     Run the graph generator.
 
@@ -218,10 +264,13 @@ def main(read_path: str, graph_save_path: str, limit: int = None) -> None:
     """
     generator = CVEGraphGenerator(read_path, limit=limit)
     df = generator.read_and_preprocess()
-    vectors, vectorizer = generator.vectorize_text(df)
+    vectors, _ = generator.vectorize_text(df)
     generator.create_graph(df, vectors)
-    generator.write_graph(graph_save_path, vectorizer)
-    logging.info(f"Graph and vectorizer saved to {graph_save_path}")
+    generator.write_graph(graph_save_path, features_path, vectorizer_path)
+    logging.info(f"Graph, features and vectorizer saved to {graph_save_path}")
+
+    generator.load_graph(graph_save_path, features_path, vectorizer_path)
+    logging.info(f"Graph, features, and vectorizer loaded from {graph_save_path}")
 
 
 if __name__ == "__main__":
@@ -229,8 +278,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--read_path", type=str, default="data/cve_docs.csv", help="Path to the CSV file containing CVE data."
     )
-    parser.add_argument("--graph_save_path", type=str, default="data/graph.pkl", help="Path to the nx graph to")
+    parser.add_argument("--graph_save_path", type=str, default="data/graph.gml", help="Path to the nx graph to")
+    parser.add_argument("--feature_save_path", type=str, default="data/features.npz", help="Path to the nx graph to")
+    parser.add_argument(
+        "--vectorizer_save_path", type=str, default="data/vectorizer.pkl", help="Path to the nx graph to"
+    )
+
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of rows to read from the CSV file.")
     args = parser.parse_args()
 
-    main(read_path=args.read_path, graph_save_path=args.graph_save_path, limit=args.limit)
+    main(
+        read_path=args.read_path,
+        graph_save_path=args.graph_save_path,
+        features_path=args.feature_save_path,
+        vectorizer_path=args.vectorizer_save_path,
+        limit=args.limit,
+    )
