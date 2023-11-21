@@ -113,7 +113,8 @@ def prepare_data(graph_save_path: str, features_path: str, vectorizer_path: str)
     num_features = len(generator.vectorizer.get_feature_names_out())
 
     default_vector = [0] * num_features  # Replace with appropriate length
-    for node in graph.nodes:
+    logging.info('Adding "vector" attribute to nodes...')
+    for node in tqdm(graph.nodes):
         if "vector" not in graph.nodes[node]:
             graph.nodes[node]["vector"] = default_vector
 
