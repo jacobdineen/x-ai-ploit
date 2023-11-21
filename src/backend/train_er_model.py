@@ -91,12 +91,15 @@ def eval_epoch(model: torch.nn.Module, data: Data, criterion: Any, device: torch
         return loss.item(), metrics
 
 
-def prepare_data(file_path: str) -> Tuple[Any, int]:
+def prepare_data(graph_save_path: str, features_path: str, vectorizer_path: str) -> Tuple[Any, int]:
     """
     Prepares graph data for the GCN model from a given file path.
 
     Args:
-        file_path (str): The file path to load the graph data.
+        graph_save_path (str): The path to the saved graph.
+        features_path (str): The path to the saved features.
+        vectorizer_path (str): The path to the saved vectorizer.
+
 
     Returns:
         Tuple[Any, int]: A tuple containing the prepared data and the number of features.
@@ -105,7 +108,7 @@ def prepare_data(file_path: str) -> Tuple[Any, int]:
     """
     logging.info("Loading graph data...")
     generator = CVEGraphGenerator(file_path="")
-    generator.load_graph(file_path)
+    generator.load_graph(graph_save_path, features_path, vectorizer_path)
     graph = generator.graph
     num_features = len(generator.vectorizer.get_feature_names_out())
 
@@ -115,13 +118,16 @@ def prepare_data(file_path: str) -> Tuple[Any, int]:
             graph.nodes[node]["vector"] = default_vector
 
     data = from_networkx(graph)
+    logging.info("nx graph transformed to torch_geometric data object")
     node_features = [graph.nodes[node]["vector"] for node in graph.nodes()]
     data.x = torch.tensor(node_features, dtype=torch.float)
     return data, num_features
 
 
 def main(
-    graph_path: str,
+    graph_save_path: str,
+    features_path: str,
+    vectorizer_path: str,
     train_percent: float = 0.80,
     valid_percent: float = 0.10,
     num_epochs: int = 100,
@@ -130,8 +136,25 @@ def main(
     hidden_dim: int = 64,
     dropout_rate: float = 0.5,
 ):
+    """
+    main logic to grab data, train model, and plot results
+
+    Args:
+        graph_path (str): The path to the saved graph.
+        train_percent (float): The percentage of data to use for training.
+        valid_percent (float): The percentage of data to use for validation.
+        num_epochs (int): The number of training epochs.
+        learning_rate (float): The learning rate for the optimizer.
+        weight_decay (float): The weight decay for the optimizer.
+        hidden_dim (int): The number of hidden dimensions.
+        dropout_rate (float): The dropout rate for the model.
+
+    Returns:
+        None
+    """
+    logging.info("Training GCN model...")
     # Prepare data
-    data, num_features = prepare_data(graph_path)
+    data, num_features = prepare_data(graph_save_path, features_path, vectorizer_path)
     train_data, val_data, _ = split_edges_and_sample_negatives(data, train_perc=train_percent, valid_perc=valid_percent)
 
     model = GCN(num_features=num_features, hidden_dim=hidden_dim, dropout_rate=dropout_rate).to(device)
@@ -147,19 +170,20 @@ def main(
         val_metrics = eval_epoch(model, val_data, criterion, device)
 
         epoch_metrics = {
-            "train": [train_metrics.loss] + list(train_metrics.other_metrics),
-            "val": [val_metrics.loss] + list(val_metrics.other_metrics),
+            "train": train_metrics,  # Directly use the tuple
+            "val": val_metrics,  # Directly use the tuple
         }
 
         for phase in ["train", "val"]:
             for key, value in zip(metric_keys, epoch_metrics[phase]):
                 metrics[phase][key].append(value)
 
+        train_metrics_formatted = " - ".join(f"{metric:.4f}" for metric in train_metrics[1])
+        val_metrics_formatted = " - ".join(f"{metric:.4f}" for metric in val_metrics[1])
         logging.info(f"Epoch {epoch+1}:")
-        logging.info(f"Train Loss: {train_metrics.loss:.4f} - Val Loss: {val_metrics.loss:.4f}")
-        logging.info(
-            f"Train Accuracy: {train_metrics.other_metrics[0]:.4f} - Val Accuracy: {val_metrics.other_metrics[0]:.4f}"
-        )
+        logging.info(f"Train Loss: {train_metrics[0]:.4f} - Val Loss: {val_metrics[0]:.4f}")
+        logging.info(f"Train Metrics: {train_metrics_formatted}")
+        logging.info(f"Val Metrics: {val_metrics_formatted}")
 
     plt.figure(figsize=(10, 6))
     plt.plot(metrics["train"]["loss"], label="Training Loss")
@@ -173,7 +197,11 @@ def main(
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="GCN Training Script")
-    parser.add_argument("--graph_path", type=str, default="data/graph.pkl", help="Path to the graph data")
+    parser.add_argument("--graph_save_path", type=str, default="data/graph.gml", help="Path to the nx graph to")
+    parser.add_argument("--feature_save_path", type=str, default="data/features.npz", help="Path to the nx graph to")
+    parser.add_argument(
+        "--vectorizer_save_path", type=str, default="data/vectorizer.pkl", help="Path to the nx graph to"
+    )
     parser.add_argument("--train_perc", type=float, default=0.80, help="Percent of data to use for training")
     parser.add_argument("--valid_perc", type=float, default=0.10, help="Percent of data to use for validation")
     parser.add_argument("--num_epochs", type=int, default=100, help="Number of training epochs")
@@ -188,7 +216,9 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     main(
-        args.graph_path,
+        args.graph_save_path,
+        args.feature_save_path,
+        args.vectorizer_save_path,
         args.train_perc,
         args.valid_perc,
         args.num_epochs,

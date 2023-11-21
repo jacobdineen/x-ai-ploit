@@ -117,7 +117,8 @@ class CVEGraphGenerator:
         logging.info("Vectorizing text data...")
         vectorizer = TfidfVectorizer(max_features=10000, min_df=2, max_df=5, ngram_range=(1, 1))
         vectors = vectorizer.fit_transform(df["content_text"])
-        return vectors, vectorizer
+        self.vectorizer = vectorizer
+        return vectors
 
     def create_graph(self, df: pd.DataFrame, vectors: dict) -> None:
         """
@@ -229,8 +230,11 @@ class CVEGraphGenerator:
 
         # Save the vectorizer
         logging.info(f"Writing vectorizer to {vectorizer_path}...")
-        with open(vectorizer_path, "wb") as f:
-            pickle.dump(self.vectorizer, f)
+        if self.vectorizer is not None:
+            with open(vectorizer_path, "wb") as f:
+                pickle.dump(self.vectorizer, f)
+        else:
+            logging.warning("Vectorizer is None and will not be written.")
 
     def load_graph(self, graph_path: str, attributes_path: str, vectorizer_path: str) -> None:
         """
@@ -270,13 +274,13 @@ def main(read_path: str, graph_save_path: str, features_path: str, vectorizer_pa
     """
     generator = CVEGraphGenerator(read_path, limit=limit)
     df = generator.read_and_preprocess()
-    vectors, _ = generator.vectorize_text(df)
+    vectors = generator.vectorize_text(df)
     generator.create_graph(df, vectors)
     generator.write_graph(graph_save_path, features_path, vectorizer_path)
     logging.info(f"Graph, features and vectorizer saved to {graph_save_path}")
 
-    generator.load_graph(graph_save_path, features_path, vectorizer_path)
-    logging.info(f"Graph, features, and vectorizer loaded from {graph_save_path}")
+    # generator.load_graph(graph_save_path, features_path, vectorizer_path)
+    # logging.info(f"Graph, features, and vectorizer loaded from {graph_save_path}")
 
 
 if __name__ == "__main__":
