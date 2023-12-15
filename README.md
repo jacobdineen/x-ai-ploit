@@ -6,7 +6,7 @@ For dev work:
 pre-commit install
 conda create -n xploit python=3.10
 conda activate xploit
-pip install -r docker_requirements.txt
+pip install -r docker_dev_requirements.txt
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
 pip install -e .
 ```

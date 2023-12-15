@@ -1,7 +1,9 @@
+chardet
 click
 datasets
 flask
 flask_cors
+grape
 ipython
 matplotlib
 networkx

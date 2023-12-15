@@ -14,3 +14,5 @@ frontend/build
 /data
 src/backend/xaiploit.egg-info/
 xaiploit.egg-info/
+xaiploit/notebooks/graphs
+notebooks/graphs/
