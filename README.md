@@ -19,6 +19,16 @@ python3
 True
 ```
 
+```bash
+python generate_er_datasets.py [-h] [--directory DIRECTORY] [--output_csv OUTPUT_CSV] [--output_cve_csv OUTPUT_CVE_CSV] [--output_cveless_csv OUTPUT_CVELESS_CSV] [--regen_data REGEN_DATA] [--limit LIMIT]
+
+python generate_er_graphs.py [-h] [--read_path READ_PATH] [--graph_save_path GRAPH_SAVE_PATH] [--feature_save_path FEATURE_SAVE_PATH] [--vectorizer_save_path VECTORIZER_SAVE_PATH] [--limit LIMIT]
+
+python train_er_model.py [-h] [--graph_save_path GRAPH_SAVE_PATH] [--feature_save_path FEATURE_SAVE_PATH]
+                              [--vectorizer_save_path VECTORIZER_SAVE_PATH] [--train_perc TRAIN_PERC] [--valid_perc VALID_PERC] [--num_epochs NUM_EPOCHS] [--learning_rate LEARNING_RATE]
+                              [--weight_decay WEIGHT_DECAY] [--hidden_dim HIDDEN_DIM][--dropout_rate DROPOUT_RATE] [--logging_interval LOGGING_INTERVAL] [--checkpoint_path CHECKPOINT_PATH]
+                              [--load_from_checkpoint LOAD_FROM_CHECKPOINT]
+
 
 # starting
 

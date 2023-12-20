@@ -17,3 +17,4 @@ xaiploit.egg-info/
 xaiploit/notebooks/graphs
 notebooks/graphs/
 cc.en.300.bin.gz
+models/checkpoint.pth.tar

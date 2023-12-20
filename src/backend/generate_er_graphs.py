@@ -245,7 +245,7 @@ class CVEGraphGenerator:
                 continue
 
             if cve_id not in self.graph:
-                self.graph.add_node(cve_id)
+                self.graph.add_node(cve_id, vector=embedding)
                 cve_node_count += 1
 
             if hash_ not in self.graph:
@@ -297,21 +297,15 @@ class CVEGraphGenerator:
         return nx.adjacency_matrix(self.graph)
 
     def write_graph(self, graph_path, attributes_path, vectorizer_path) -> None:
-        """
-        Write the graph, node attributes, and vectorizer to separate files.
-
-        Args:
-            graph_path: The path to write the graph structure to.
-            attributes_path: The path to write the node attributes to.
-            vectorizer_path: The path to write the vectorizer to.
-        """
         logging.info(f"Writing graph structure to {graph_path}...")
         node_attributes = {}
 
-        # Separate complex node attributes
+        # Extract complex node attributes without modifying the original graph
         for node, data in self.graph.nodes(data=True):
-            if "embedding" in data:
-                node_attributes[node] = data.pop("embedding")
+            if "vector" in data:
+                # Ensure that the embedding is a numpy array
+                embedding = np.array(data["vector"])
+                node_attributes[node] = embedding
 
         # Write the graph structure
         nx.write_gml(self.graph, graph_path)
@@ -325,23 +319,21 @@ class CVEGraphGenerator:
         self.ft_model.save_model(vectorizer_path)
 
     def load_graph(self, graph_path: str, attributes_path: str, vectorizer_path: str) -> None:
-        """
-        Load a graph, node attributes, and vectorizer from files.
-
-        Args:
-            graph_path: The path to load the graph structure from.
-            attributes_path: The path to load the node attributes from.
-            vectorizer_path: The path to load the vectorizer from.
-        """
         logging.info(f"Loading graph structure from {graph_path}...")
         self.graph = nx.read_gml(graph_path)
 
         # Load node attributes
         logging.info(f"Loading node attributes from {attributes_path}...")
-        with np.load(attributes_path) as data:
-            for node, vector in data.items():
-                self.graph.nodes[node]["embedding"] = vector
+        with np.load(attributes_path, allow_pickle=True) as data:
+            for node in self.graph.nodes():
+                embedding = data.get(node)
+                if embedding is not None:
+                    self.graph.nodes[node]["embedding"] = embedding
+                else:
+                    logging.warning(f"No embedding found for node {node}, using default.")
+                    self.graph.nodes[node]["embedding"] = [0] * self.ft_model.get_dimension()
 
+        # Load vectorizer
         logging.info(f"Loading vectorizer from {vectorizer_path}...")
         self.ft_model = fasttext.load_model(vectorizer_path)
 
