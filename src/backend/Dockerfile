@@ -11,7 +11,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY docker_requirements.txt setup.py ./
-RUN pip3 install --no-cache-dir -r docker_requirements.txt
+RUN pip3 install --no-cache-dir -r docker_prod_requirements.txt
 
 # Copy the application code into the container
 COPY src/backend ./src/backend
