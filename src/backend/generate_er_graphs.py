@@ -6,10 +6,12 @@ To be used for downstream tasks such as training a graph convolutional network (
 
 """
 import argparse
+import concurrent.futures
 import logging
 import pickle
 import sys
 
+import fasttext.util
 import networkx as nx
 import nltk
 import numpy as np
@@ -17,7 +19,6 @@ import pandas as pd
 from networkx.algorithms import bipartite
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
@@ -48,6 +49,7 @@ class CVEGraphGenerator:
         self.graph = nx.Graph()
         self.cveid_col = "cveids_explicit"
         self.vectorizer = None
+        self.ft_model = None
         nltk.download("stopwords")
         nltk.download("wordnet")
 
@@ -73,60 +75,83 @@ class CVEGraphGenerator:
             pd.Series: The preprocessed text.
         """
         # Convert to lowercase and remove irrelevant characters
-        texts = texts.str.lower()
-        texts = texts.str.replace(r"[^a-zA-Z\s]", "", regex=True)
+        texts = texts.str.lower().str.replace(r"[^a-zA-Z\s]", "", regex=True)
 
-        # Remove stopwords and lemmatize
+        # Remove stopwords
         stop_words = set(stopwords.words("english"))
+        stop_words_pattern = r"\b" + r"\b|\b".join(stop_words) + r"\b"
+        texts = texts.str.replace(stop_words_pattern, "", regex=True)
+
+        # Lemmatization
         lemmatizer = WordNetLemmatizer()
 
-        def lemmatize_and_remove_stopwords(text):
-            tokens = text.split()
-            tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
-            return " ".join(tokens)
+        def lemmatize_text(text):
+            return " ".join([lemmatizer.lemmatize(word) for word in text.split()])
 
-        return texts.apply(lemmatize_and_remove_stopwords)
+        return texts.apply(lemmatize_text)
 
-    def read_and_preprocess(self) -> pd.DataFrame:
-        """
-        Read a CSV file in chunks and preprocess it.
+    def process_chunk(self, chunk):
+        try:
+            # Preprocess the chunk here
+            chunk[self.cveid_col] = chunk[self.cveid_col].apply(eval)
+            chunk = chunk.explode(self.cveid_col)
+            chunk["content_text"] = self.preprocess_text_series(chunk["content_text"])
+            return chunk
+        except Exception as e:
+            print(f"Error processing chunk: {e}")
+            return pd.DataFrame()  # Return an empty DataFrame in case of error
 
-        Returns:
-            df: a pandas DataFrame containing the preprocessed data from the CSV file
-        """
-        logging.info("Reading and preprocessing the file...")
-        chunksize = 10000  # Adjust this based on your memory constraints
+    def chunk_generator(self, file_path, chunksize):
+        try:
+            for chunk in pd.read_csv(file_path, chunksize=chunksize, nrows=self.limit):
+                yield chunk
+        except StopIteration:
+            return
+
+    def read_and_preprocess(self):
+        chunksize = 10000
+        futures = []
         processed_chunks = []
 
-        for chunk in pd.read_csv(self.file_path, chunksize=chunksize, nrows=self.limit):
-            try:
-                chunk[self.cveid_col] = chunk[self.cveid_col].apply(eval)
-                chunk = chunk.explode(self.cveid_col)
-            except Exception as e:
-                logging.error(f"Error processing chunk: {e}")
-                continue
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for ix, chunk in enumerate(self.chunk_generator(self.file_path, chunksize)):
+                logging.info(f"Processing chunk {ix}")
+                future = executor.submit(self.process_chunk, chunk)
+                futures.append(future)
 
-            chunk["content_text"] = self.preprocess_text_series(chunk["content_text"])
-            processed_chunks.append(chunk)
+            for future in concurrent.futures.as_completed(futures):
+                processed_chunk = future.result()
+                if not processed_chunk.empty:
+                    processed_chunks.append(processed_chunk)
 
-        logging.info("Concatenating processed chunks...")
-        df = pd.concat(processed_chunks, ignore_index=True)
+        df = pd.concat(processed_chunks, ignore_index=True) if processed_chunks else pd.DataFrame()
         return df
 
-    def vectorize_text(self, df: pd.DataFrame):
-        logging.info("Vectorizing text data...")
-        vectorizer = TfidfVectorizer(max_features=10000, min_df=2, max_df=5, ngram_range=(1, 1))
-        vectors = vectorizer.fit_transform(df["content_text"])
-        self.vectorizer = vectorizer
+    def vectorize_text(self, df: pd.DataFrame, fasttext_model: str = "cc.en.300.bin"):
+        logging.info("Vectorizing text data with FastText...")
+
+        fasttext.util.download_model("en", if_exists="ignore")  # 'en' for English
+        ft_model = fasttext.load_model(fasttext_model)
+
+        def vectorize_doc(doc):
+            words = doc.split()
+            word_vectors = [ft_model.get_word_vector(word) for word in words]
+            if len(word_vectors) == 0:
+                return np.zeros(ft_model.get_dimension())
+            return np.mean(word_vectors, axis=0)
+
+        vectors = np.array([vectorize_doc(doc) for doc in df["content_text"]])
+
+        self.ft_model = ft_model
         return vectors
 
-    def create_graph(self, df: pd.DataFrame, vectors: dict) -> None:
+    def create_graph(self, df: pd.DataFrame, vectors: np.array) -> None:
         """
         Create a graph from the dataframe.
 
         Args:
             df: a pandas DataFrame containing the data from the CSV file
-            vectors: dict of node attributes
+            vectors: numpy array of fasttext embeddings
 
         Returns:
             None
@@ -140,8 +165,7 @@ class CVEGraphGenerator:
         skipped_hash = 0
 
         for index, row in tqdm(df.iterrows()):
-            cve_id = row["cveids_explicit"]
-            hash_ = row["hash"]
+            cve_id, hash_ = row["cveids_explicit"], row["hash"]
 
             if pd.isna(cve_id):
                 skipped_cves += 1
@@ -156,7 +180,7 @@ class CVEGraphGenerator:
                 cve_node_count += 1
 
             if hash_ not in self.graph:
-                vector = vectors[index].toarray()[0]  # Convert sparse matrix row to dense array
+                vector = vectors[index]
                 self.graph.add_node(hash_, vector=vector)
                 hash_node_count += 1
 
@@ -167,12 +191,9 @@ class CVEGraphGenerator:
             if self.graph.degree(node) > 1:
                 multi_edge_node_count += 1
 
-        logging.info(f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges.")
-        logging.info(f"Number of skipped CVEs: {skipped_cves}")
-        logging.info(f"Number of skipped hashes: {skipped_hash}")
-        logging.info(f"Number of CVE nodes: {cve_node_count}")
-        logging.info(f"Number of hash nodes: {hash_node_count}")
-        logging.info(f"Number of nodes with more than one edge: {multi_edge_node_count}")
+        logging.info(
+            f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges. Number of skipped CVEs: {skipped_cves}. Number of skipped hashes: {skipped_hash}. Number of CVE nodes: {cve_node_count}. Number of hash nodes: {hash_node_count}. Number of nodes with more than one edge: {multi_edge_node_count}"
+        )
 
         is_bipartite = self._is_graph_bipartite()
         if is_bipartite:
