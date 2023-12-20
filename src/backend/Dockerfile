@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Install Python dependencies
-COPY docker_requirements.txt setup.py ./
+COPY docker_prod_requirements.txt setup.py ./
 RUN pip3 install --no-cache-dir -r docker_prod_requirements.txt
 
 # Copy the application code into the container
