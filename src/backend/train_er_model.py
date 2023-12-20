@@ -157,43 +157,59 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     return checkpoint.get("epoch", 0), checkpoint.get("best_val_loss", float("inf"))
 
 
+def plot_results(metrics):
+    plt.figure(figsize=(10, 6))
+    plt.plot(metrics["train"]["loss"], label="Training Loss")
+    plt.plot(metrics["val"]["loss"], label="Validation Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss Over Epochs")
+    plt.legend()
+    plt.show()
+
+
 def main(
     graph_save_path: str,
     features_path: str,
     vectorizer_path: str,
-    train_percent: float = 0.80,
-    valid_percent: float = 0.20,
-    num_epochs: int = 100,
-    learning_rate: float = 0.01,
-    weight_decay: float = 1e-5,
-    hidden_dim: int = 128,
-    dropout_rate: float = 0.5,
+    hidden_dims: list,
     logging_interval: int = 100,
     checkpoint_path: str = "models/checkpoint.pth.tar",
     load_from_checkpoint: bool = False,
+    **kwargs,
 ):
     """
     main logic to grab data, train model, and plot results
 
     Args:
         graph_path (str): The path to the saved graph.
+        hidden_dims (list): The list of hidden dimensions for each layer.
+        logging_interval (int): The interval at which to log metrics.
+        checkpoint_path (str): The path to save the model checkpoint.
+        load_from_checkpoint (bool): Whether to load the best model checkpoint.
+
+    kwargs:
         train_percent (float): The percentage of data to use for training.
         valid_percent (float): The percentage of data to use for validation.
         num_epochs (int): The number of training epochs.
         learning_rate (float): The learning rate for the optimizer.
         weight_decay (float): The weight decay for the optimizer.
-        hidden_dim (int): The number of hidden dimensions.
         dropout_rate (float): The dropout rate for the model.
-        logging_interval (int): The interval at which to log metrics.
-        checkpoint_path (str): The path to save the model checkpoint.
-        load_from_checkpoint (bool): Whether to load the best model checkpoint.
+        plot_results (bool): Whether to plot the training and validation loss over epochs.
 
     Returns:
         None
     """
+    train_percent = kwargs.get("train_percent", 0.80)
+    valid_percent = kwargs.get("valid_percent", 0.20)
+    num_epochs = kwargs.get("num_epochs", 100)
+    learning_rate = kwargs.get("learning_rate", 0.01)
+    weight_decay = kwargs.get("weight_decay", 1e-5)
+    dropout_rate = kwargs.get("dropout_rate", 0.5)
+    plot_results = kwargs.get("plot_results", True)
 
     num_features = 300  # hard coded for now
-    model = GCN(num_features=num_features, hidden_dim=hidden_dim, dropout_rate=dropout_rate).to(device)
+    model = GCN(num_features=num_features, hidden_dims=hidden_dims, dropout_rate=dropout_rate).to(device)
     logging.info(f"model loaded onto device: {device}")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.BCEWithLogitsLoss()
@@ -268,14 +284,9 @@ def main(
             # Optional: break the loop or handle the error in a specific way
             break
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(metrics["train"]["loss"], label="Training Loss")
-    plt.plot(metrics["val"]["loss"], label="Validation Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title("Training and Validation Loss Over Epochs")
-    plt.legend()
-    plt.show()
+    if plot_results:
+        plot_results(metrics)
+
     return None
 
 
@@ -287,16 +298,22 @@ def parse_arguments():
     parser.add_argument("--train_perc", type=float, default=0.70, help="Percent of data to use for training")
     parser.add_argument("--valid_perc", type=float, default=0.20, help="Percent of data to use for validation")
     parser.add_argument("--num_epochs", type=int, default=100, help="Number of training epochs")
-    parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate for the optimizer")
+    parser.add_argument("--learning_rate", type=float, default=0.01, help="Learning rate for the optimizer")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Weight decay for the optimizer")
-    parser.add_argument("--hidden_dim", type=int, default=128, help="Number of hidden dimensions")
+    parser.add_argument(
+        "--hidden_dims",
+        type=int,
+        nargs="+",
+        default=[128, 128, 128],
+        help="List of hidden dimensions for each layer (default: 3 layers with 128 units each)",
+    )
     parser.add_argument("--dropout_rate", type=float, default=0.5, help="Dropout rate for the model")
     parser.add_argument("--logging_interval", type=int, default=100, help="logging interval for metrics")
     parser.add_argument(
         "--checkpoint_path", type=str, default="models/checkpoint.pth.tar", help="GCN model checkpoint path"
     )
     parser.add_argument("--load_from_checkpoint", type=bool, default=False, help="load best model checkpoint")
-
+    parser.add_argument("--plot_results", type=bool, default=True, help="plot training and validation loss")
     return parser.parse_args()
 
 
@@ -311,9 +328,10 @@ if __name__ == "__main__":
         args.num_epochs,
         args.learning_rate,
         args.weight_decay,
-        args.hidden_dim,
+        args.hidden_dims,
         args.dropout_rate,
         args.logging_interval,
         args.checkpoint_path,
         args.load_from_checkpoint,
+        args.plot_results,
     )
