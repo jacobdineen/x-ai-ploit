@@ -192,16 +192,19 @@ class CVEGraphGenerator:
                 multi_edge_node_count += 1
 
         logging.info(
-            f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges. Number of skipped CVEs: {skipped_cves}. Number of skipped hashes: {skipped_hash}. Number of CVE nodes: {cve_node_count}. Number of hash nodes: {hash_node_count}. Number of nodes with more than one edge: {multi_edge_node_count}"
+            f"Graph created with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges.\n"
+            f"Number of skipped CVEs: {skipped_cves}.\n"
+            f"Number of skipped hashes: {skipped_hash}.\n"
+            f"Number of CVE nodes: {cve_node_count}.\n"
+            f"Number of hash nodes: {hash_node_count}.\n"
+            f"Number of nodes with more than one edge: {multi_edge_node_count}"
         )
 
         is_bipartite = self._is_graph_bipartite()
         if is_bipartite:
             logging.info("Graph is bipartite.")
         else:
-            logging.warning("Graph is not bipartite.")
-            logging.warning("Graph will not be saved.")
-            logging.warning("Exiting...")
+            logging.warning("Graph is not bipartite & will not be saved. Exiting...")
             sys.exit(1)
 
     def get_content_text(self, hash_) -> str:
