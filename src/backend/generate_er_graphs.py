@@ -16,6 +16,7 @@ import networkx as nx
 import nltk
 import numpy as np
 import pandas as pd
+from joblib import dump, load
 from networkx.algorithms import bipartite
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -105,21 +106,42 @@ class CVEGraphGenerator:
             pd.Series: The preprocessed text.
         """
 
-        def vectorize_doc(doc):
+        def vectorize_docs(docs):
             """
-            Vectorize a single document using FastText.
+            Vectorize a batch of documents using FastText.
 
             Args:
-                doc (str): A single document to vectorize.
+                docs (iterable of str): An iterable of documents to vectorize.
 
             Returns:
-                np.array: Vector representation of the document.
+                np.array: An array of vector representations of the documents.
             """
-            words = doc.split()
-            word_vectors = [self.ft_model.get_word_vector(word) for word in words]
-            if len(word_vectors) == 0:
-                return np.zeros(self.ft_model.get_dimension())
-            return np.mean(word_vectors, axis=0)
+
+            # Pre-allocate an array for the vectors
+            vectors = np.zeros((len(docs), self.ft_model.get_dimension()))
+
+            # Process each document in the batch
+            for i, doc in enumerate(docs):
+                words = doc.split()
+                if words:
+                    word_vectors = [self.ft_model.get_word_vector(word) for word in words]
+                    vectors[i] = np.mean(word_vectors, axis=0)
+
+            return vectors
+
+        def batch_lemmatize(docs):
+            """
+            Lemmatize a batch of documents.
+
+            Args:
+                docs (iterable of str): An iterable of documents to lemmatize.
+
+            Returns:
+                iterable of str: Lemmatized documents.
+            """
+            lemmatizer = WordNetLemmatizer()
+            lemmatized_docs = [" ".join([lemmatizer.lemmatize(word) for word in doc.split()]) for doc in docs]
+            return lemmatized_docs
 
         # Convert to lowercase and remove irrelevant characters
         texts = texts.str.lower().str.replace(r"[^a-zA-Z\s]", "", regex=True)
@@ -128,14 +150,10 @@ class CVEGraphGenerator:
         stop_words_pattern = r"\b" + r"\b|\b".join(stop_words) + r"\b"
         texts = texts.str.replace(stop_words_pattern, "", regex=True)
         # Lemmatization
-        lemmatizer = WordNetLemmatizer()
-        vectorized_lemmatize = np.vectorize(
-            lambda text: " ".join([lemmatizer.lemmatize(word) for word in text.split()])
-        )
-        lemmatized_texts = pd.Series(vectorized_lemmatize(texts.values))
+        lemmatized_texts = batch_lemmatize(texts.values)
         # Vectorization
         # print(lemmatized_texts.values.shape)
-        vectors = np.array([vectorize_doc(doc) for doc in lemmatized_texts.values])
+        vectors = vectorize_docs(lemmatized_texts)
         logging.info(f"Vectorized {len(vectors)} documents.")
         logging.info(f"Vector shape: {vectors.shape}")
         return vectors
@@ -275,70 +293,21 @@ class CVEGraphGenerator:
             logging.warning("Graph is not bipartite & will not be saved. Exiting...")
             sys.exit(1)
 
-    def get_content_text(self, hash_) -> str:
-        """
-        Retrieve the content text for a given hash.
-
-        Args:
-            hash_: The hash identifier.
-
-        Returns:
-            The content text associated with the hash, if available.
-        """
-        return self.graph.nodes[hash_].get("content_text", None)
-
-    def get_adjacency_matrix(self) -> nx.adjacency_matrix:
-        """
-        Create and return the adjacency matrix of the graph.
-
-        Returns:
-            A sparse matrix representing the adjacency matrix.
-        """
-        return nx.adjacency_matrix(self.graph)
-
-    def write_graph(self, graph_path, attributes_path, vectorizer_path) -> None:
+    def write_graph(self, graph_path, vectorizer_path) -> None:
         logging.info(f"Writing graph structure to {graph_path}...")
-        node_attributes = {}
-
-        # Extract complex node attributes without modifying the original graph
-        for node, data in self.graph.nodes(data=True):
-            if "vector" in data:
-                # Ensure that the embedding is a numpy array
-                embedding = np.array(data["vector"])
-                node_attributes[node] = embedding
-
-        # Write the graph structure
-        nx.write_gml(self.graph, graph_path)
-
-        # Save node attributes
-        logging.info(f"Writing node attributes to {attributes_path}...")
-        np.savez(attributes_path, **node_attributes)
-
-        # Save the vectorizer
+        dump(self.graph, graph_path)
         logging.info(f"Writing fasttext model to {vectorizer_path}...")
         self.ft_model.save_model(vectorizer_path)
 
-    def load_graph(self, graph_path: str, attributes_path: str, vectorizer_path: str) -> None:
+    def load_graph(self, graph_path: str, vectorizer_path: str) -> None:
         logging.info(f"Loading graph structure from {graph_path}...")
-        self.graph = nx.read_gml(graph_path)
-
-        # Load node attributes
-        logging.info(f"Loading node attributes from {attributes_path}...")
-        with np.load(attributes_path, allow_pickle=True) as data:
-            for node in self.graph.nodes():
-                embedding = data.get(node)
-                if embedding is not None:
-                    self.graph.nodes[node]["embedding"] = embedding
-                else:
-                    logging.warning(f"No embedding found for node {node}, using default.")
-                    self.graph.nodes[node]["embedding"] = [0] * self.ft_model.get_dimension()
-
+        self.graph = load(graph_path)
         # Load vectorizer
         logging.info(f"Loading vectorizer from {vectorizer_path}...")
         self.ft_model = fasttext.load_model(vectorizer_path)
 
 
-def main(read_path: str, graph_save_path: str, features_path: str, vectorizer_path: str, limit: int = None) -> None:
+def main(read_path: str, output_dir: str, limit: int = None) -> None:
     """
     Run the graph generator.
 
@@ -350,11 +319,22 @@ def main(read_path: str, graph_save_path: str, features_path: str, vectorizer_pa
     Returns:
         None
     """
-    generator = CVEGraphGenerator(read_path, limit=limit)
-    df = generator.read_and_preprocess()
-    generator.create_graph(df)
-    generator.write_graph(graph_save_path, features_path, vectorizer_path)
-    logging.info(f"Graph, features and vectorizer saved to {graph_save_path}")
+    # output_dir/samplesize_{limit}/graph.gml
+    # output_dir/samplesize_{limit}/ft_model.bin
+    # make the directory if it doesn't exist, else do nothing
+    os.makedirs(os.path.join(output_dir, f"samplesize_{limit}"), exist_ok=True)
+    graph_save_path = os.path.join(output_dir, f"samplesize_{limit}", "graph.gml")
+    vectorizer_path = os.path.join(output_dir, f"samplesize_{limit}", "ft_model.bin")
+    if not os.path.exists(graph_save_path) and not os.path.exists(vectorizer_path):
+        os.makedirs(os.path.join(output_dir, f"samplesize_{limit}"), exist_ok=True)
+        generator = CVEGraphGenerator(read_path, limit=limit)
+        df = generator.read_and_preprocess()
+        generator.create_graph(df)
+        generator.write_graph(graph_save_path, vectorizer_path)
+        generator.load_graph(graph_save_path, vectorizer_path)
+        logging.info(f"Graph, features and vectorizer saved to {graph_save_path}")
+    else:
+        logging.info("paths exist.. skipping data gen")
 
 
 if __name__ == "__main__":
@@ -362,19 +342,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--read_path", type=str, default="data/cve_docs.csv", help="Path to the CSV file containing CVE data."
     )
-    parser.add_argument("--graph_save_path", type=str, default="data/graph.gml", help="Path to the nx graph to")
-    parser.add_argument(
-        "--feature_save_path", type=str, default="data/features.npz", help="Path to the text embeddings to"
-    )
-    parser.add_argument("--vectorizer_save_path", type=str, default="data/ft_model.bin", help="Path to the ft model to")
-
+    parser.add_argument("--output_dir", type=str, default="data/", help="Path to the output directory.")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of rows to read from the CSV file.")
     args = parser.parse_args()
 
     main(
         read_path=args.read_path,
-        graph_save_path=args.graph_save_path,
-        features_path=args.feature_save_path,
-        vectorizer_path=args.vectorizer_save_path,
+        output_dir=args.output_dir,
         limit=args.limit,
     )

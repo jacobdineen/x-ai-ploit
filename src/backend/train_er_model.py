@@ -5,6 +5,7 @@ Module to train a graph convolutional network (GCN) model on a given graph datas
 """
 import argparse
 import logging
+import os
 from typing import Any, Tuple
 
 import matplotlib.pyplot as plt
@@ -118,7 +119,7 @@ def eval_epoch(
         return loss.item(), metrics, logits, predictions, labels
 
 
-def prepare_data(graph_save_path: str, features_path: str, vectorizer_path: str) -> Tuple[Any, int]:
+def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
     """
     Prepares graph data for the GCN model from a given file path.
 
@@ -135,19 +136,14 @@ def prepare_data(graph_save_path: str, features_path: str, vectorizer_path: str)
     """
     logging.info("Loading graph data...")
     generator = CVEGraphGenerator(file_path="")
-    generator.load_graph(graph_save_path, features_path, vectorizer_path)
+    generator.load_graph(graph_save_path, vectorizer_path)
     graph = generator.graph
     num_features = generator.ft_model.get_dimension()
     logging.info("Number of features: %d", num_features)
 
-    # Before converting to PyTorch Geometric data, ensure all nodes have the 'embedding' attribute
-    missing_embeddings = [node for node in graph.nodes if "vector" not in graph.nodes[node]]
-    if missing_embeddings:
-        raise ValueError(f"Missing 'vector' attribute in nodes: {missing_embeddings}")
-
     data = from_networkx(graph)
     logging.info("nx graph transformed to torch_geometric data object")
-    node_features = [graph.nodes[node]["embedding"] for node in graph.nodes()]
+    node_features = [graph.nodes[node]["vector"] for node in graph.nodes()]
 
     data.x = torch.tensor(node_features, dtype=torch.float)
 
@@ -196,9 +192,8 @@ def _plot_results(metrics):
 
 
 def main(
-    graph_save_path: str,
-    features_path: str,
-    vectorizer_path: str,
+    read_dir: str,
+    data_size: int,
     hidden_dims: list,
     logging_interval: int = 100,
     checkpoint_path: str = "models/checkpoint.pth.tar",
@@ -209,7 +204,7 @@ def main(
     main logic to grab data, train model, and plot results
 
     Args:
-        graph_path (str): The path to the saved graph.
+        read_dir (str): The directory containing the files to read.
         hidden_dims (list): The list of hidden dimensions for each layer.
         logging_interval (int): The interval at which to log metrics.
         checkpoint_path (str): The path to save the model checkpoint.
@@ -246,8 +241,14 @@ def main(
         return None
 
     logging.info("Training GCN model...")
+
     # Prepare data
-    data, num_features = prepare_data(graph_save_path, features_path, vectorizer_path)
+    # Construct paths dynamically based on the limit and output directory
+    base_path = os.path.join(read_dir, f"samplesize_{data_size}" if data_size else "all_data")
+    graph_save_path = os.path.join(base_path, "graph.gml")
+    vectorizer_path = os.path.join(base_path, "ft_model.bin")
+
+    data, num_features = prepare_data(graph_save_path, vectorizer_path)
     train_data, val_data, _ = split_edges_and_sample_negatives(data, train_perc=train_percent, valid_perc=valid_percent)
     logging.info("Data prepared")
 
@@ -307,8 +308,6 @@ def main(
         except RuntimeError as e:
             torch.cuda.synchronize(device)
             print(f"Runtime error during epoch {epoch+1}: {e}")
-            # Additional logging or cleanup actions can be added here
-            # Optional: break the loop or handle the error in a specific way
             break
 
     if plot_results:
@@ -319,9 +318,8 @@ def main(
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="GCN Training Script")
-    parser.add_argument("--graph_save_path", type=str, default="data/graph.gml", help="Path to the nx graph to")
-    parser.add_argument("--feature_save_path", type=str, default="data/features.npz", help="Path to the nx graph to")
-    parser.add_argument("--vectorizer_save_path", type=str, default="data/ft_model.bin", help="Path to the nx graph to")
+    parser.add_argument("--read_dir", type=str, default="data", help="Path to the nx graph to")
+    parser.add_argument("--data_size", type=int, default=None, help="Number of samples to use for training")
     parser.add_argument("--train_perc", type=float, default=0.70, help="Percent of data to use for training")
     parser.add_argument("--valid_perc", type=float, default=0.20, help="Percent of data to use for validation")
     parser.add_argument("--num_epochs", type=int, default=100, help="Number of training epochs")
@@ -347,9 +345,8 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     main(
-        args.graph_save_path,
-        args.feature_save_path,
-        args.vectorizer_save_path,
+        args.read_dir,
+        args.data_size,
         args.hidden_dims,
         logging_interval=args.logging_interval,
         checkpoint_path=args.checkpoint_path,
