@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
+from sklearn import metrics as sk_metrics
+from torch import sigmoid
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
@@ -18,11 +20,19 @@ from tqdm import tqdm
 from src.backend.gcn import GCN
 from src.backend.generate_er_graphs import CVEGraphGenerator
 from src.backend.utils.graph_utils import split_edges_and_sample_negatives
-from src.backend.utils.modeling_utils import compute_metrics
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def compute_metrics(labels, predictions, logits, loss):
+    accuracy = sk_metrics.accuracy_score(labels, predictions)
+    precision = sk_metrics.precision_score(labels, predictions)
+    recall = sk_metrics.recall_score(labels, predictions)
+    f1 = sk_metrics.f1_score(labels, predictions)
+    aucroc = sk_metrics.roc_auc_score(labels, sigmoid(logits).detach().cpu().numpy())
+    return loss, accuracy, precision, recall, f1, aucroc
 
 
 def train_epoch(
