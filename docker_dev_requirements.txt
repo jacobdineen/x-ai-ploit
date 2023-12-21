@@ -1,0 +1,22 @@
+chardet
+click
+datasets
+fasttext==0.9.2
+flask
+flask_cors
+grape
+graphviz # sudo apt-get install graphviz
+ipykernel
+ipython
+jupyterlab
+matplotlib
+networkx
+nltk
+pandas==2.1.1
+pre-commit==2.21.0
+protobuf
+pytest==7.3.1
+requests
+scikit-learn==1.2.2
+torch_geometric
+tqdm
