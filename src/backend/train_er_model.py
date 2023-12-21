@@ -8,7 +8,9 @@ import logging
 from typing import Any, Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+import torch_geometric
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
@@ -24,20 +26,28 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def train_epoch(
-    model: torch.nn.Module, data: Data, optimizer: torch.optim.Optimizer, criterion: Any, device: torch.device
-) -> Tuple[float, dict]:
+    model: torch.nn.Module,
+    data: torch_geometric.data.Data,
+    optimizer: torch.optim.Optimizer,
+    criterion: Any,
+    device: torch.device,
+) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
     """
     Train the model for one epoch.
 
     Args:
-        model (Module): The graph convolutional network (GCN) model to be trained.
-        data (Data): The data object from torch_geometric containing graph data including node features and edge indices.
-        optimizer (Optimizer): The optimizer to be used for training.
-        criterion (Any): The loss function used for training.
+        model (torch.nn.Module): The graph convolutional network (GCN) model to be trained.
+        data (torch_geometric.data.Data): The data object containing graph data,
+                including node features and edge indices.
+        optimizer (torch.optim.Optimizer): The optimizer to be used for training.
+        criterion (torch.nn.modules.loss._Loss): The loss function used for training.
         device (torch.device): The device (CPU or CUDA) on which the model is being trained.
 
     Returns:
-        Tuple[float, dict]: A tuple containing the loss value for the epoch (as a float) and a dictionary of computed metrics.
+        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
+        A tuple containing the loss for the epoch, a tuple
+        of various evaluation metrics (accuracy, precision, recall, F1 score, ROC-AUC score, classification report),
+        the model logits, binary predictions, and labels.
     """
     model.train()
     optimizer.zero_grad()
@@ -56,22 +66,29 @@ def train_epoch(
     predictions = predictions.cpu().numpy()
     labels = labels.cpu().numpy()
 
-    metrics = compute_metrics(labels, predictions, logits)
-    return loss.item(), metrics
+    metrics = compute_metrics(labels, predictions, logits, loss)
+    return loss.item(), metrics, logits, predictions, labels
 
 
-def eval_epoch(model: torch.nn.Module, data: Data, criterion: Any, device: torch.device) -> Tuple[float, dict]:
+def eval_epoch(
+    model: torch.nn.Module, data: Data, criterion: Any, device: torch.device
+) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
     """
     Evaluate the model on validation or test data for one epoch.
 
     Args:
         model (Module): The graph convolutional network (GCN) model to be evaluated.
-        data (Data): The data object from torch_geometric containing graph data including node features and edge indices for validation or testing.
+        data (Data): The data object from torch_geometric containing
+            graph data including node features and edge indices for validation or testing.
         criterion (Any): The loss function used for evaluation.
         device (torch.device): The device (CPU or CUDA) on which the model is being evaluated.
 
     Returns:
-        Tuple[float, dict]: A tuple containing the loss value for the epoch (as a float) and a dictionary of computed metrics.
+        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
+        A tuple containing the loss for the epoch,
+        a tuple of various evaluation metrics (accuracy, precision, recall,
+        F1 score, ROC-AUC score, classification report),
+        the model logits, binary predictions, and labels.
     """
     model.eval()
     with torch.no_grad():
@@ -87,8 +104,8 @@ def eval_epoch(model: torch.nn.Module, data: Data, criterion: Any, device: torch
         predictions = predictions.cpu().numpy()
         labels = labels.cpu().numpy()
 
-        metrics = compute_metrics(labels, predictions, logits)
-        return loss.item(), metrics
+        metrics = compute_metrics(labels, predictions, logits, loss)
+        return loss.item(), metrics, logits, predictions, labels
 
 
 def prepare_data(graph_save_path: str, features_path: str, vectorizer_path: str) -> Tuple[Any, int]:
@@ -157,7 +174,7 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     return checkpoint.get("epoch", 0), checkpoint.get("best_val_loss", float("inf"))
 
 
-def plot_results(metrics):
+def _plot_results(metrics):
     plt.figure(figsize=(10, 6))
     plt.plot(metrics["train"]["loss"], label="Training Loss")
     plt.plot(metrics["val"]["loss"], label="Validation Loss")
@@ -285,7 +302,7 @@ def main(
             break
 
     if plot_results:
-        plot_results(metrics)
+        _plot_results(metrics)
 
     return None
 
@@ -323,15 +340,15 @@ if __name__ == "__main__":
         args.graph_save_path,
         args.feature_save_path,
         args.vectorizer_save_path,
-        args.train_perc,
-        args.valid_perc,
-        args.num_epochs,
-        args.learning_rate,
-        args.weight_decay,
         args.hidden_dims,
-        args.dropout_rate,
-        args.logging_interval,
-        args.checkpoint_path,
-        args.load_from_checkpoint,
-        args.plot_results,
+        logging_interval=args.logging_interval,
+        checkpoint_path=args.checkpoint_path,
+        load_from_checkpoint=args.load_from_checkpoint,
+        train_percent=args.train_perc,
+        valid_percent=args.valid_perc,
+        num_epochs=args.num_epochs,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        dropout_rate=args.dropout_rate,
+        plot_results=args.plot_results,
     )
