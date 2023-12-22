@@ -4,10 +4,15 @@ from typing import Tuple
 
 from torch import randperm
 from torch_geometric.data import Data
+
+# from torch_geometric.loader import DataLoader
 from torch_geometric.utils import negative_sampling
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
+
+# https://chat.openai.com/share/e9495e15-6218-4cfa-b4e2-b10466a807ff
+#  need to have custom dataloaders here for batch training
 
 
 def split_edges_and_sample_negatives(data: Data, train_perc: float, valid_perc: float) -> Tuple[Data, Data, Data]:

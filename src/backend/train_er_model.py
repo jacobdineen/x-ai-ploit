@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
-from sklearn import metrics as sk_metrics
-from torch import sigmoid
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
@@ -26,14 +24,26 @@ log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+torch.set_float32_matmul_precision("high")
 
-def compute_metrics(labels, predictions, logits, loss):
-    accuracy = sk_metrics.accuracy_score(labels, predictions)
-    precision = sk_metrics.precision_score(labels, predictions)
-    recall = sk_metrics.recall_score(labels, predictions)
-    f1 = sk_metrics.f1_score(labels, predictions)
-    aucroc = sk_metrics.roc_auc_score(labels, sigmoid(logits).detach().cpu().numpy())
-    return loss, accuracy, precision, recall, f1, aucroc
+
+def compute_metrics(labels, predictions, loss):
+    labels = torch.clamp(torch.round(labels), 0, 1).bool()
+    preds = predictions.bool()
+    # True Positives, False Positives, and False Negatives
+    tp = torch.sum(preds & labels).item()
+    fp = torch.sum(preds & ~labels).item()
+    fn = torch.sum(~preds & labels).item()
+
+    # Accuracy
+    accuracy = torch.sum(preds == labels).item() / labels.numel()
+
+    # Precision, Recall, and F1 Score
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return loss, accuracy, precision, recall, f1
 
 
 def train_epoch(
@@ -61,7 +71,7 @@ def train_epoch(
         the model logits, binary predictions, and labels.
     """
     model.train()
-    optimizer.zero_grad()
+    optimizer.zero_grad(set_to_none=True)
 
     z = model(data.x.to(device), data.edge_index.to(device))
     logits = model.decode(z, data.train_pos_edge_index.to(device), data.train_neg_edge_index.to(device))
@@ -74,10 +84,9 @@ def train_epoch(
     optimizer.step()
 
     predictions = torch.sigmoid(logits) > 0.5
-    predictions = predictions.cpu().numpy()
-    labels = labels.cpu().numpy()
 
-    metrics = compute_metrics(labels, predictions, logits, loss)
+    metrics = compute_metrics(labels, predictions, loss)
+    torch.cuda.empty_cache()
     return loss.item(), metrics, logits, predictions, labels
 
 
@@ -112,11 +121,11 @@ def eval_epoch(
         loss = criterion(logits, labels)
 
         predictions = torch.sigmoid(logits) > 0.5
-        predictions = predictions.cpu().numpy()
-        labels = labels.cpu().numpy()
 
-        metrics = compute_metrics(labels, predictions, logits, loss)
-        return loss.item(), metrics, logits, predictions, labels
+        metrics = compute_metrics(labels, predictions, loss)
+
+    torch.cuda.empty_cache()
+    return loss.item(), metrics, logits, predictions, labels
 
 
 def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
@@ -250,9 +259,8 @@ def main(
 
     data, num_features = prepare_data(graph_save_path, vectorizer_path)
     train_data, val_data, _ = split_edges_and_sample_negatives(data, train_perc=train_percent, valid_perc=valid_percent)
-    logging.info("Data prepared")
 
-    metric_keys = ["loss", "accuracy", "precision", "recall", "f1", "aucroc"]
+    metric_keys = ["loss", "accuracy", "precision", "recall", "f1"]
     metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
 
     best_val_loss = float("inf")  # Initialize best validation loss for checkpointing
