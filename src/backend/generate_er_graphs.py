@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Generate a graph from CVE data.
 Add edges between CVEs and hashes, vectorize

@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
-from sklearn import metrics as sk_metrics
-from torch import sigmoid
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
@@ -27,13 +25,20 @@ logging.basicConfig(level=logging.INFO, format=log_format)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def compute_metrics(labels, predictions, logits, loss):
-    accuracy = sk_metrics.accuracy_score(labels, predictions)
-    precision = sk_metrics.precision_score(labels, predictions)
-    recall = sk_metrics.recall_score(labels, predictions)
-    f1 = sk_metrics.f1_score(labels, predictions)
-    aucroc = sk_metrics.roc_auc_score(labels, sigmoid(logits).detach().cpu().numpy())
-    return loss, accuracy, precision, recall, f1, aucroc
+def compute_metrics(labels, predictions, loss):
+    labels = torch.clamp(torch.round(labels), 0, 1).bool()
+    preds = predictions.bool()
+    # True Positives, False Positives, and False Negatives
+    tp = torch.sum(preds & labels).item()
+    fp = torch.sum(preds & ~labels).item()
+    fn = torch.sum(~preds & labels).item()
+
+    accuracy = torch.sum(preds == labels).item() / labels.numel()
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return loss, accuracy, precision, recall, f1
 
 
 def train_epoch(
@@ -74,11 +79,8 @@ def train_epoch(
     optimizer.step()
 
     predictions = torch.sigmoid(logits) > 0.5
-    predictions = predictions.cpu().numpy()
-    labels = labels.cpu().numpy()
-
-    metrics = compute_metrics(labels, predictions, logits, loss)
-    return loss.item(), metrics, logits, predictions, labels
+    metrics = compute_metrics(labels, predictions, loss.item())
+    return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
 
 
 def eval_epoch(
@@ -112,11 +114,8 @@ def eval_epoch(
         loss = criterion(logits, labels)
 
         predictions = torch.sigmoid(logits) > 0.5
-        predictions = predictions.cpu().numpy()
-        labels = labels.cpu().numpy()
-
-        metrics = compute_metrics(labels, predictions, logits, loss)
-        return loss.item(), metrics, logits, predictions, labels
+        metrics = compute_metrics(labels, predictions, loss.item())
+        return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
 
 
 def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
@@ -150,6 +149,17 @@ def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
     return data, num_features
 
 
+def _plot_results(metrics):
+    plt.figure(figsize=(10, 6))
+    plt.plot(metrics["train"]["loss"], label="Training Loss")
+    plt.plot(metrics["val"]["loss"], label="Validation Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss Over Epochs")
+    plt.legend()
+    plt.show()
+
+
 def save_checkpoint(state, filename="checkpoint.pth.tar"):
     """
     Save the training model at the checkpoint.
@@ -180,22 +190,10 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     return checkpoint.get("epoch", 0), checkpoint.get("best_val_loss", float("inf"))
 
 
-def _plot_results(metrics):
-    plt.figure(figsize=(10, 6))
-    plt.plot(metrics["train"]["loss"], label="Training Loss")
-    plt.plot(metrics["val"]["loss"], label="Validation Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title("Training and Validation Loss Over Epochs")
-    plt.legend()
-    plt.show()
-
-
 def main(
     read_dir: str,
     data_size: int,
     hidden_dims: list,
-    logging_interval: int = 100,
     checkpoint_path: str = "models/checkpoint.pth.tar",
     load_from_checkpoint: bool = False,
     **kwargs,
@@ -206,9 +204,7 @@ def main(
     Args:
         read_dir (str): The directory containing the files to read.
         hidden_dims (list): The list of hidden dimensions for each layer.
-        logging_interval (int): The interval at which to log metrics.
         checkpoint_path (str): The path to save the model checkpoint.
-        load_from_checkpoint (bool): Whether to load the best model checkpoint.
 
     kwargs:
         train_percent (float): The percentage of data to use for training.
@@ -218,6 +214,9 @@ def main(
         weight_decay (float): The weight decay for the optimizer.
         dropout_rate (float): The dropout rate for the model.
         plot_results (bool): Whether to plot the training and validation loss over epochs.
+        batch_size (int): The batch size for training and validation.
+        logging_interval (int): The interval at which to log metrics.
+        load_from_checkpoint (bool): Whether to load the best model checkpoint.
 
     Returns:
         None
@@ -229,6 +228,12 @@ def main(
     weight_decay = kwargs.get("weight_decay", 1e-5)
     dropout_rate = kwargs.get("dropout_rate", 0.5)
     plot_results = kwargs.get("plot_results", True)
+    _ = kwargs.get("batch_size", 256)
+    logging_interval = kwargs.get("logging_interval", 100)
+    load_from_checkpoint = kwargs.get("load_from_checkpoint", False)
+
+    # Seed here
+    torch.manual_seed(0)
 
     num_features = 300  # hard coded for now
     model = GCN(num_features=num_features, hidden_dims=hidden_dims, dropout_rate=dropout_rate).to(device)
@@ -249,10 +254,9 @@ def main(
     vectorizer_path = os.path.join(base_path, "ft_model.bin")
 
     data, num_features = prepare_data(graph_save_path, vectorizer_path)
-    train_data, val_data, _ = split_edges_and_sample_negatives(data, train_perc=train_percent, valid_perc=valid_percent)
-    logging.info("Data prepared")
+    train_data, val_data, _ = split_edges_and_sample_negatives(data, train_percent, valid_percent)
 
-    metric_keys = ["loss", "accuracy", "precision", "recall", "f1", "aucroc"]
+    metric_keys = ["loss", "accuracy", "precision", "recall", "f1"]
     metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
 
     best_val_loss = float("inf")  # Initialize best validation loss for checkpointing
@@ -283,9 +287,6 @@ def main(
                 logging.info(f"Train Loss: {train_metrics[0]:.4f} - Val Loss: {val_metrics[0]:.4f}")
                 logging.info(f"Train Metrics: {train_metrics_formatted}")
                 logging.info(f"Val Metrics: {val_metrics_formatted}")
-                # validation confusion matrix
-                # using sklearn
-                # from sklearn.metrics import confusion_matrix
 
             # Checkpointing logic
             is_best = val_metrics[0] < best_val_loss
@@ -339,6 +340,7 @@ def parse_arguments():
     )
     parser.add_argument("--load_from_checkpoint", type=bool, default=False, help="load best model checkpoint")
     parser.add_argument("--plot_results", type=bool, default=True, help="plot training and validation loss")
+    parser.add_argument("--batch_size", type=int, default=256, help="batch size for training and validation")
     return parser.parse_args()
 
 
@@ -348,7 +350,6 @@ if __name__ == "__main__":
         args.read_dir,
         args.data_size,
         args.hidden_dims,
-        logging_interval=args.logging_interval,
         checkpoint_path=args.checkpoint_path,
         load_from_checkpoint=args.load_from_checkpoint,
         train_percent=args.train_perc,
@@ -358,4 +359,6 @@ if __name__ == "__main__":
         weight_decay=args.weight_decay,
         dropout_rate=args.dropout_rate,
         plot_results=args.plot_results,
+        batch_size=args.batch_size,
+        logging_interval=args.logging_interval,
     )
