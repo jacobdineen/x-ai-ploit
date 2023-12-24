@@ -12,28 +12,36 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
-from sklearn import metrics as sk_metrics
-from torch import sigmoid
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
 
 from src.backend.gcn import GCN
 from src.backend.generate_er_graphs import CVEGraphGenerator
-from src.backend.utils.graph_utils import split_edges_and_sample_negatives
+from src.backend.utils.graph_utils import create_edge_batches, split_edges_and_sample_negatives
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+torch.set_float32_matmul_precision("high")
+# Seed this script for reproducibility
 
-def compute_metrics(labels, predictions, logits, loss):
-    accuracy = sk_metrics.accuracy_score(labels, predictions)
-    precision = sk_metrics.precision_score(labels, predictions)
-    recall = sk_metrics.recall_score(labels, predictions)
-    f1 = sk_metrics.f1_score(labels, predictions)
-    aucroc = sk_metrics.roc_auc_score(labels, sigmoid(logits).detach().cpu().numpy())
-    return loss, accuracy, precision, recall, f1, aucroc
+
+def compute_metrics(labels, predictions, loss):
+    labels = torch.clamp(torch.round(labels), 0, 1).bool()
+    preds = predictions.bool()
+    # True Positives, False Positives, and False Negatives
+    tp = torch.sum(preds & labels).item()
+    fp = torch.sum(preds & ~labels).item()
+    fn = torch.sum(~preds & labels).item()
+
+    accuracy = torch.sum(preds == labels).item() / labels.numel()
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return loss, accuracy, precision, recall, f1
 
 
 def train_epoch(
@@ -42,81 +50,116 @@ def train_epoch(
     optimizer: torch.optim.Optimizer,
     criterion: Any,
     device: torch.device,
+    pos_data: torch_geometric.data.Data,
+    neg_data: torch_geometric.data.Data,
+    batch_size: int = 32,
 ) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
-    """
-    Train the model for one epoch.
-
-    Args:
-        model (torch.nn.Module): The graph convolutional network (GCN) model to be trained.
-        data (torch_geometric.data.Data): The data object containing graph data,
-                including node features and edge indices.
-        optimizer (torch.optim.Optimizer): The optimizer to be used for training.
-        criterion (torch.nn.modules.loss._Loss): The loss function used for training.
-        device (torch.device): The device (CPU or CUDA) on which the model is being trained.
-
-    Returns:
-        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
-        A tuple containing the loss for the epoch, a tuple
-        of various evaluation metrics (accuracy, precision, recall, F1 score, ROC-AUC score, classification report),
-        the model logits, binary predictions, and labels.
-    """
     model.train()
-    optimizer.zero_grad()
+    total_loss = 0
+    batch_count = 0
+    all_logits = []
+    all_predictions = []
+    all_labels = []
 
-    z = model(data.x.to(device), data.edge_index.to(device))
-    logits = model.decode(z, data.train_pos_edge_index.to(device), data.train_neg_edge_index.to(device))
-    labels = torch.cat(
-        [torch.ones(data.train_pos_edge_index.size(1)), torch.zeros(data.train_neg_edge_index.size(1))], dim=0
-    ).to(device)
+    # Need to recreate batches on every run?
+    pos_batches = create_edge_batches(pos_data.edge_index, batch_size, data.num_nodes, data.x)
+    neg_batches = create_edge_batches(neg_data.edge_index, batch_size, data.num_nodes, data.x)
 
-    loss = criterion(logits, labels)
-    loss.backward()
-    optimizer.step()
+    logging.info("starting epoch")
+    for pos_batch, neg_batch in zip(pos_batches, neg_batches):
+        optimizer.zero_grad(set_to_none=True)
 
-    predictions = torch.sigmoid(logits) > 0.5
-    predictions = predictions.cpu().numpy()
-    labels = labels.cpu().numpy()
+        # Combine positive and negative edges and their respective node features
+        edge_index = torch.cat([pos_batch.edge_index, neg_batch.edge_index], dim=1)
+        x = data.x.to(device)
 
-    metrics = compute_metrics(labels, predictions, logits, loss)
-    return loss.item(), metrics, logits, predictions, labels
+        # Forward pass
+        z = model(x, edge_index.to(device))
+        pos_edge_index = pos_batch.edge_index.to(device)
+        neg_edge_index = neg_batch.edge_index.to(device)
+        logits = model.decode(z, pos_edge_index, neg_edge_index)
+
+        # Create labels for positive and negative edges
+        labels = torch.cat([torch.ones(pos_edge_index.size(1)), torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
+
+        # Loss computation and backpropagation
+        loss = criterion(logits, labels)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+
+        all_logits.append(logits)
+        all_labels.append(labels)
+        predictions = torch.sigmoid(logits) > 0.5
+        all_predictions.append(predictions)
+        batch_count += 1
+        torch.cuda.empty_cache()
+
+    # Concatenate all predictions and labels across batches
+    all_predictions = torch.cat(all_predictions, dim=0)
+    all_labels = torch.cat(all_labels, dim=0)
+    avg_loss = total_loss / batch_count
+    metrics = compute_metrics(all_labels, all_predictions, avg_loss)
+
+    return avg_loss, metrics, all_logits, all_predictions.cpu().numpy(), all_labels.cpu().numpy()
 
 
 def eval_epoch(
-    model: torch.nn.Module, data: Data, criterion: Any, device: torch.device
+    model: torch.nn.Module,
+    data: Data,
+    criterion: Any,
+    device: torch.device,
+    pos_data: torch_geometric.data.Data,
+    neg_data: torch_geometric.data.Data,
+    batch_size: int = 32,
 ) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
-    """
-    Evaluate the model on validation or test data for one epoch.
-
-    Args:
-        model (Module): The graph convolutional network (GCN) model to be evaluated.
-        data (Data): The data object from torch_geometric containing
-            graph data including node features and edge indices for validation or testing.
-        criterion (Any): The loss function used for evaluation.
-        device (torch.device): The device (CPU or CUDA) on which the model is being evaluated.
-
-    Returns:
-        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
-        A tuple containing the loss for the epoch,
-        a tuple of various evaluation metrics (accuracy, precision, recall,
-        F1 score, ROC-AUC score, classification report),
-        the model logits, binary predictions, and labels.
-    """
     model.eval()
+    total_loss = 0.0
+    batch_count = 0
+    all_logits = []
+    all_labels = []
+    all_predictions = []
+
+    pos_batches = create_edge_batches(pos_data.edge_index, batch_size, data.num_nodes, data.x)
+    neg_batches = create_edge_batches(neg_data.edge_index, batch_size, data.num_nodes, data.x)
+
     with torch.no_grad():
-        z = model(data.x.to(device), data.edge_index.to(device))
-        logits = model.decode(z, data.val_pos_edge_index.to(device), data.val_neg_edge_index.to(device))
-        labels = torch.cat(
-            [torch.ones(data.val_pos_edge_index.size(1)), torch.zeros(data.val_neg_edge_index.size(1))], dim=0
-        ).to(device)
+        for pos_batch, neg_batch in zip(pos_batches, neg_batches):
+            if pos_batch.edge_index.size(1) == 0 or neg_batch.edge_index.size(1) == 0:
+                logging.info("Skipping batch with no edges")
+                continue
+            edge_index = torch.cat([pos_batch.edge_index, neg_batch.edge_index], dim=1)
+            x = data.x.to(device)
 
-        loss = criterion(logits, labels)
+            # Forward pass
+            z = model(x, edge_index.to(device))
+            pos_edge_index = pos_batch.edge_index.to(device)
+            neg_edge_index = neg_batch.edge_index.to(device)
+            logits = model.decode(z, pos_edge_index, neg_edge_index)
 
-        predictions = torch.sigmoid(logits) > 0.5
-        predictions = predictions.cpu().numpy()
-        labels = labels.cpu().numpy()
+            # Labels
+            labels = torch.cat([torch.ones(pos_edge_index.size(1)), torch.zeros(neg_edge_index.size(1))], dim=0).to(
+                device
+            )
 
-        metrics = compute_metrics(labels, predictions, logits, loss)
-        return loss.item(), metrics, logits, predictions, labels
+            loss = criterion(logits, labels)
+            total_loss += loss.item()
+
+            all_logits.append(logits)
+            all_labels.append(labels)
+            predictions = torch.sigmoid(logits) > 0.5
+            all_predictions.append(predictions)
+            batch_count += 1
+            torch.cuda.empty_cache()
+
+    all_logits = torch.cat(all_logits, dim=0)
+    all_labels = torch.cat(all_labels, dim=0)
+    all_predictions = torch.cat(all_predictions, dim=0)
+    avg_loss = total_loss / batch_count
+    metrics = compute_metrics(all_labels, all_predictions, avg_loss)
+
+    return avg_loss, metrics, all_logits, all_predictions.cpu().numpy(), all_labels.cpu().numpy()
 
 
 def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
@@ -195,7 +238,6 @@ def main(
     read_dir: str,
     data_size: int,
     hidden_dims: list,
-    logging_interval: int = 100,
     checkpoint_path: str = "models/checkpoint.pth.tar",
     load_from_checkpoint: bool = False,
     **kwargs,
@@ -206,9 +248,7 @@ def main(
     Args:
         read_dir (str): The directory containing the files to read.
         hidden_dims (list): The list of hidden dimensions for each layer.
-        logging_interval (int): The interval at which to log metrics.
         checkpoint_path (str): The path to save the model checkpoint.
-        load_from_checkpoint (bool): Whether to load the best model checkpoint.
 
     kwargs:
         train_percent (float): The percentage of data to use for training.
@@ -218,6 +258,9 @@ def main(
         weight_decay (float): The weight decay for the optimizer.
         dropout_rate (float): The dropout rate for the model.
         plot_results (bool): Whether to plot the training and validation loss over epochs.
+        batch_size (int): The batch size for training and validation.
+        logging_interval (int): The interval at which to log metrics.
+        load_from_checkpoint (bool): Whether to load the best model checkpoint.
 
     Returns:
         None
@@ -229,6 +272,13 @@ def main(
     weight_decay = kwargs.get("weight_decay", 1e-5)
     dropout_rate = kwargs.get("dropout_rate", 0.5)
     plot_results = kwargs.get("plot_results", True)
+    batch_size = kwargs.get("batch_size", 256)
+    logging_interval = kwargs.get("logging_interval", 100)
+    load_from_checkpoint = kwargs.get("load_from_checkpoint", False)
+
+    # Seed here
+    torch.manual_seed(0)
+    np.random.seed(0)
 
     num_features = 300  # hard coded for now
     model = GCN(num_features=num_features, hidden_dims=hidden_dims, dropout_rate=dropout_rate).to(device)
@@ -249,18 +299,21 @@ def main(
     vectorizer_path = os.path.join(base_path, "ft_model.bin")
 
     data, num_features = prepare_data(graph_save_path, vectorizer_path)
-    train_data, val_data, _ = split_edges_and_sample_negatives(data, train_perc=train_percent, valid_perc=valid_percent)
-    logging.info("Data prepared")
+    train_pos_data, train_neg_data, val_pos_data, val_neg_data, _, _ = split_edges_and_sample_negatives(
+        data, train_percent, valid_percent
+    )
 
-    metric_keys = ["loss", "accuracy", "precision", "recall", "f1", "aucroc"]
+    metric_keys = ["loss", "accuracy", "precision", "recall", "f1"]
     metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
 
     best_val_loss = float("inf")  # Initialize best validation loss for checkpointing
     for epoch in tqdm(range(num_epochs)):
         try:
             torch.cuda.synchronize(device)
-            train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
-            val_metrics = eval_epoch(model, val_data, criterion, device)
+            train_metrics = train_epoch(
+                model, data, optimizer, criterion, device, train_pos_data, train_neg_data, batch_size
+            )
+            val_metrics = eval_epoch(model, data, criterion, device, val_pos_data, val_neg_data, batch_size)
 
             epoch_metrics = {
                 "train": train_metrics,  # Directly use the tuple
@@ -283,9 +336,6 @@ def main(
                 logging.info(f"Train Loss: {train_metrics[0]:.4f} - Val Loss: {val_metrics[0]:.4f}")
                 logging.info(f"Train Metrics: {train_metrics_formatted}")
                 logging.info(f"Val Metrics: {val_metrics_formatted}")
-                # validation confusion matrix
-                # using sklearn
-                # from sklearn.metrics import confusion_matrix
 
             # Checkpointing logic
             is_best = val_metrics[0] < best_val_loss
@@ -339,6 +389,7 @@ def parse_arguments():
     )
     parser.add_argument("--load_from_checkpoint", type=bool, default=False, help="load best model checkpoint")
     parser.add_argument("--plot_results", type=bool, default=True, help="plot training and validation loss")
+    parser.add_argument("--batch_size", type=int, default=256, help="batch size for training and validation")
     return parser.parse_args()
 
 
@@ -348,7 +399,6 @@ if __name__ == "__main__":
         args.read_dir,
         args.data_size,
         args.hidden_dims,
-        logging_interval=args.logging_interval,
         checkpoint_path=args.checkpoint_path,
         load_from_checkpoint=args.load_from_checkpoint,
         train_percent=args.train_perc,
@@ -358,4 +408,6 @@ if __name__ == "__main__":
         weight_decay=args.weight_decay,
         dropout_rate=args.dropout_rate,
         plot_results=args.plot_results,
+        batch_size=args.batch_size,
+        logging_interval=args.logging_interval,
     )
