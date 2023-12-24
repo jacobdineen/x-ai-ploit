@@ -39,13 +39,14 @@ def split_edges_and_sample_negatives(data: Data, train_perc: float, valid_perc: 
         edge_index=data.edge_index, num_nodes=num_nodes, num_neg_samples=test_edge.size(1)
     )
 
-    train_pos_data = Data(x=data.x, edge_index=train_edge)
-    train_neg_data = Data(x=data.x, edge_index=train_edge_neg)
-    val_pos_data = Data(x=data.x, edge_index=val_edge)
-    val_neg_data = Data(x=data.x, edge_index=val_edge_neg)
-    test_pos_data = Data(x=data.x, edge_index=test_edge)
-    test_neg_data = Data(x=data.x, edge_index=test_edge_neg)
-    return train_pos_data, train_neg_data, val_pos_data, val_neg_data, test_pos_data, test_neg_data
+    return {
+        "train_pos": Data(x=data.x, edge_index=train_edge),
+        "train_neg": Data(x=data.x, edge_index=train_edge_neg),
+        "val_pos": Data(x=data.x, edge_index=val_edge),
+        "val_neg": Data(x=data.x, edge_index=val_edge_neg),
+        "test_pos": Data(x=data.x, edge_index=test_edge),
+        "test_neg": Data(x=data.x, edge_index=test_edge_neg),
+    }
 
 
 def create_edge_batches(edge_index, batch_size, num_nodes, node_features):
@@ -53,7 +54,6 @@ def create_edge_batches(edge_index, batch_size, num_nodes, node_features):
     for start in range(0, total_edges, batch_size):
         end = min(start + batch_size, total_edges)
         batch_edges = edge_index[:, start:end]
-        print(f"Creating batch with {batch_edges.size(1)} edges")  # Debugging info
         yield Data(x=node_features, edge_index=batch_edges, num_nodes=num_nodes)
 
 
@@ -66,7 +66,8 @@ def create_edge_batches(edge_index, batch_size, num_nodes, node_features):
 #     vectorizer_path = "data/samplesize_102/ft_model.bin"
 #     generator.load_graph(graph_save_path, vectorizer_path)
 #     graph = generator.graph
-#     print("graph num nodes: ", graph.number_of_nodes())
+#     print("graph num nodes: ", graph.numbe
+# r_of_nodes())
 #     print("graph num edges: ", graph.number_of_edges())
 #     num_features = generator.ft_model.get_dimension()
 #     logging.info("Number of features: %d", num_features)
