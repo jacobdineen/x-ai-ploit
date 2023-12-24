@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
+"""
+Module to train a graph convolutional network (GCN) model on a given graph dataset.
+
+"""
 import argparse
 import logging
 import os
 from typing import Any, Tuple
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+import torch_geometric
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
@@ -36,20 +42,28 @@ def compute_metrics(labels, predictions, loss):
 
 
 def train_epoch(
-    model: torch.nn.Module, data: Data, optimizer: torch.optim.Optimizer, criterion: Any, device: torch.device
-) -> Tuple[float, dict]:
+    model: torch.nn.Module,
+    data: torch_geometric.data.Data,
+    optimizer: torch.optim.Optimizer,
+    criterion: Any,
+    device: torch.device,
+) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
     """
     Train the model for one epoch.
 
     Args:
-        model (Module): The graph convolutional network (GCN) model to be trained.
-        data (Data): The data object from torch_geometric containing graph data including node features and edge indices.
-        optimizer (Optimizer): The optimizer to be used for training.
-        criterion (Any): The loss function used for training.
+        model (torch.nn.Module): The graph convolutional network (GCN) model to be trained.
+        data (torch_geometric.data.Data): The data object containing graph data,
+                including node features and edge indices.
+        optimizer (torch.optim.Optimizer): The optimizer to be used for training.
+        criterion (torch.nn.modules.loss._Loss): The loss function used for training.
         device (torch.device): The device (CPU or CUDA) on which the model is being trained.
 
     Returns:
-        Tuple[float, dict]: A tuple containing the loss value for the epoch (as a float) and a dictionary of computed metrics.
+        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
+        A tuple containing the loss for the epoch, a tuple
+        of various evaluation metrics (accuracy, precision, recall, F1 score, ROC-AUC score, classification report),
+        the model logits, binary predictions, and labels.
     """
     model.train()
     optimizer.zero_grad()
@@ -69,18 +83,25 @@ def train_epoch(
     return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
 
 
-def eval_epoch(model: torch.nn.Module, data: Data, criterion: Any, device: torch.device) -> Tuple[float, dict]:
+def eval_epoch(
+    model: torch.nn.Module, data: Data, criterion: Any, device: torch.device
+) -> Tuple[float, Tuple[float, float, float, float, float, str], torch.Tensor, np.ndarray, np.ndarray]:
     """
     Evaluate the model on validation or test data for one epoch.
 
     Args:
         model (Module): The graph convolutional network (GCN) model to be evaluated.
-        data (Data): The data object from torch_geometric containing graph data including node features and edge indices for validation or testing.
+        data (Data): The data object from torch_geometric containing
+            graph data including node features and edge indices for validation or testing.
         criterion (Any): The loss function used for evaluation.
         device (torch.device): The device (CPU or CUDA) on which the model is being evaluated.
 
     Returns:
-        Tuple[float, dict]: A tuple containing the loss value for the epoch (as a float) and a dictionary of computed metrics.
+        Tuple[float, Tuple[float, float, float, float, float, str], Tensor, np.ndarray, np.ndarray]:
+        A tuple containing the loss for the epoch,
+        a tuple of various evaluation metrics (accuracy, precision, recall,
+        F1 score, ROC-AUC score, classification report),
+        the model logits, binary predictions, and labels.
     """
     model.eval()
     with torch.no_grad():
