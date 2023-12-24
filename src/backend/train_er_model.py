@@ -65,9 +65,6 @@ def train_epoch(
     optimizer.step()
 
     predictions = torch.sigmoid(logits) > 0.5
-    predictions = predictions.cpu().numpy()
-    labels = labels.cpu().numpy()
-
     metrics = compute_metrics(labels, predictions, loss.item())
     return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
 
@@ -96,9 +93,6 @@ def eval_epoch(model: torch.nn.Module, data: Data, criterion: Any, device: torch
         loss = criterion(logits, labels)
 
         predictions = torch.sigmoid(logits) > 0.5
-        predictions = predictions.cpu().numpy()
-        labels = labels.cpu().numpy()
-
         metrics = compute_metrics(labels, predictions, loss.item())
         return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
 
@@ -213,7 +207,7 @@ def main(
     weight_decay = kwargs.get("weight_decay", 1e-5)
     dropout_rate = kwargs.get("dropout_rate", 0.5)
     plot_results = kwargs.get("plot_results", True)
-    batch_size = kwargs.get("batch_size", 256)
+    _ = kwargs.get("batch_size", 256)
     logging_interval = kwargs.get("logging_interval", 100)
     load_from_checkpoint = kwargs.get("load_from_checkpoint", False)
 
@@ -239,9 +233,7 @@ def main(
     vectorizer_path = os.path.join(base_path, "ft_model.bin")
 
     data, num_features = prepare_data(graph_save_path, vectorizer_path)
-    train_pos_data, train_neg_data, val_pos_data, val_neg_data, _, _ = split_edges_and_sample_negatives(
-        data, train_percent, valid_percent
-    )
+    train_data, val_data, _ = split_edges_and_sample_negatives(data, train_percent, valid_percent)
 
     metric_keys = ["loss", "accuracy", "precision", "recall", "f1"]
     metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
@@ -250,10 +242,8 @@ def main(
     for epoch in tqdm(range(num_epochs)):
         try:
             torch.cuda.synchronize(device)
-            train_metrics = train_epoch(
-                model, data, optimizer, criterion, device, train_pos_data, train_neg_data, batch_size
-            )
-            val_metrics = eval_epoch(model, data, criterion, device, val_pos_data, val_neg_data, batch_size)
+            train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
+            val_metrics = eval_epoch(model, val_data, criterion, device)
 
             epoch_metrics = {
                 "train": train_metrics,  # Directly use the tuple
