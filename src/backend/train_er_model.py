@@ -12,13 +12,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch_geometric
+import torch_geometric.transforms as T
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 from tqdm import tqdm
 
 from src.backend.gcn import GCN
 from src.backend.generate_er_graphs import CVEGraphGenerator
-from src.backend.utils.graph_utils import split_edges_and_sample_negatives
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
@@ -69,18 +69,16 @@ def train_epoch(
     optimizer.zero_grad()
 
     z = model(data.x.to(device), data.edge_index.to(device))
-    logits = model.decode(z, data.train_pos_edge_index.to(device), data.train_neg_edge_index.to(device))
-    labels = torch.cat(
-        [torch.ones(data.train_pos_edge_index.size(1)), torch.zeros(data.train_neg_edge_index.size(1))], dim=0
-    ).to(device)
 
-    loss = criterion(logits, labels)
+    logits = model.decode(z, data.edge_label_index.to(device))
+    labels = data.edge_label.to(device)
+    loss = criterion(logits, labels.float())
     loss.backward()
     optimizer.step()
 
     predictions = torch.sigmoid(logits) > 0.5
     metrics = compute_metrics(labels, predictions, loss.item())
-    return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
+    return loss.item(), metrics, logits, predictions, labels
 
 
 def eval_epoch(
@@ -106,33 +104,16 @@ def eval_epoch(
     model.eval()
     with torch.no_grad():
         z = model(data.x.to(device), data.edge_index.to(device))
-        logits = model.decode(z, data.val_pos_edge_index.to(device), data.val_neg_edge_index.to(device))
-        labels = torch.cat(
-            [torch.ones(data.val_pos_edge_index.size(1)), torch.zeros(data.val_neg_edge_index.size(1))], dim=0
-        ).to(device)
-
-        loss = criterion(logits, labels)
+        logits = model.decode(z, data.edge_label_index.to(device))
+        labels = data.edge_label.to(device)
+        loss = criterion(logits, labels.float())
 
         predictions = torch.sigmoid(logits) > 0.5
         metrics = compute_metrics(labels, predictions, loss.item())
-        return loss.item(), metrics, logits, predictions.cpu().numpy(), labels.cpu().numpy()
+        return loss.item(), metrics, logits, predictions, labels
 
 
 def prepare_data(graph_save_path: str, vectorizer_path: str) -> Tuple[Any, int]:
-    """
-    Prepares graph data for the GCN model from a given file path.
-
-    Args:
-        graph_save_path (str): The path to the saved graph.
-        features_path (str): The path to the saved features.
-        vectorizer_path (str): The path to the saved vectorizer.
-
-
-    Returns:
-        Tuple[Any, int]: A tuple containing the prepared data and the number of features.
-                        The prepared data is a torch_geometric Data object with node features and edge indices.
-                        The number of features is an integer representing the size of the feature vector for each node.
-    """
     logging.info("Loading graph data...")
     generator = CVEGraphGenerator(file_path="")
     generator.load_graph(graph_save_path, vectorizer_path)
@@ -161,29 +142,10 @@ def _plot_results(metrics):
 
 
 def save_checkpoint(state, filename="checkpoint.pth.tar"):
-    """
-    Save the training model at the checkpoint.
-
-    Args:
-        state (dict): Contains model's state_dict, optimizer's state_dict, epoch, etc.
-        filename (str): Name of the checkpoint file.
-    """
     torch.save(state, filename)
 
 
 def load_checkpoint(checkpoint_path, model, optimizer):
-    """
-    Load a model checkpoint.
-
-    Args:
-        checkpoint_path (str): Path to the checkpoint file.
-        model (torch.nn.Module): The model to load the checkpoint into.
-        optimizer (torch.optim.Optimizer): The optimizer to load the checkpoint into.
-
-    Returns:
-        int: The epoch to resume training from.
-        float: The best validation loss recorded up to this checkpoint.
-    """
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint["state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer"])
@@ -234,7 +196,6 @@ def main(
 
     # Seed here
     torch.manual_seed(0)
-
     num_features = 300  # hard coded for now
     model = GCN(num_features=num_features, hidden_dims=hidden_dims, dropout_rate=dropout_rate).to(device)
     logging.info(f"model loaded onto device: {device}")
@@ -254,62 +215,62 @@ def main(
     vectorizer_path = os.path.join(base_path, "ft_model.bin")
 
     data, num_features = prepare_data(graph_save_path, vectorizer_path)
-    train_data, val_data, _ = split_edges_and_sample_negatives(data, train_percent, valid_percent)
+    test_perc = 1 - train_percent - valid_percent
+
+    transform = T.RandomLinkSplit(
+        num_val=valid_percent,  # Proportion of edges in the validation set
+        num_test=test_perc,  # Proportion of edges in the test set
+        is_undirected=True,  # Set to True if your graph is undirected
+        add_negative_train_samples=True,  # If True, adds negative samples for training
+        neg_sampling_ratio=1.0,  # Ratio of negative to positive samples
+    )
+
+    train_data, val_data, _ = transform(data)
 
     metric_keys = ["loss", "accuracy", "precision", "recall", "f1"]
     metrics = {phase: {key: [] for key in metric_keys} for phase in ["train", "val"]}
 
     best_val_loss = float("inf")  # Initialize best validation loss for checkpointing
     for epoch in tqdm(range(num_epochs)):
-        try:
-            torch.cuda.synchronize(device)
-            train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
-            val_metrics = eval_epoch(model, val_data, criterion, device)
+        train_metrics = train_epoch(model, train_data, optimizer, criterion, device)
+        val_metrics = eval_epoch(model, val_data, criterion, device)
 
-            epoch_metrics = {
-                "train": train_metrics,  # Directly use the tuple
-                "val": val_metrics,  # Directly use the tuple
-            }
+        epoch_metrics = {
+            "train": train_metrics,  # Directly use the tuple
+            "val": val_metrics,  # Directly use the tuple
+        }
 
-            for phase in ["train", "val"]:
-                for key, value in zip(metric_keys, epoch_metrics[phase]):
-                    metrics[phase][key].append(value)
+        for phase in ["train", "val"]:
+            for key, value in zip(metric_keys, epoch_metrics[phase]):
+                metrics[phase][key].append(value)
 
-            # Update the formatting to include metric names
-            train_metrics_formatted = " - ".join(
-                f"{name}: {metric:.4f}" for name, metric in zip(metric_keys, train_metrics[1])
+        format_metrics = lambda metrics: " - ".join(
+            f"{name}: {metric:.4f}" for name, metric in zip(metric_keys, metrics[1])
+        )
+        train_metrics_formatted = format_metrics(train_metrics)
+        val_metrics_formatted = format_metrics(val_metrics)
+
+        if epoch % logging_interval == 0:
+            logging.info(f"Epoch {epoch+1}:")
+            logging.info(f"Train Loss: {train_metrics[0]:.4f} - Val Loss: {val_metrics[0]:.4f}")
+            logging.info(f"Train Metrics: {train_metrics_formatted}")
+            logging.info(f"Val Metrics: {val_metrics_formatted}")
+
+        # Checkpointing logic
+        is_best = val_metrics[0] < best_val_loss
+        if is_best:
+            best_val_loss = val_metrics[0]
+            logging.info("checkpointing model at epoch %d with best validation loss of %.3f", epoch + 1, best_val_loss)
+
+            save_checkpoint(
+                {
+                    "epoch": epoch + 1,
+                    "state_dict": model.state_dict(),
+                    "best_val_loss": best_val_loss,
+                    "optimizer": optimizer.state_dict(),
+                },
+                filename=checkpoint_path,
             )
-            val_metrics_formatted = " - ".join(
-                f"{name}: {metric:.4f}" for name, metric in zip(metric_keys, val_metrics[1])
-            )
-            if epoch % logging_interval == 0:
-                logging.info(f"Epoch {epoch+1}:")
-                logging.info(f"Train Loss: {train_metrics[0]:.4f} - Val Loss: {val_metrics[0]:.4f}")
-                logging.info(f"Train Metrics: {train_metrics_formatted}")
-                logging.info(f"Val Metrics: {val_metrics_formatted}")
-
-            # Checkpointing logic
-            is_best = val_metrics[0] < best_val_loss
-            if is_best:
-                best_val_loss = val_metrics[0]
-                logging.info(
-                    "checkpointing model at epoch %d with best validation loss of %.3f", epoch + 1, best_val_loss
-                )
-
-                save_checkpoint(
-                    {
-                        "epoch": epoch + 1,
-                        "state_dict": model.state_dict(),
-                        "best_val_loss": best_val_loss,
-                        "optimizer": optimizer.state_dict(),
-                    },
-                    filename=checkpoint_path,
-                )
-
-        except RuntimeError as e:
-            torch.cuda.synchronize(device)
-            print(f"Runtime error during epoch {epoch+1}: {e}")
-            break
 
     if plot_results:
         _plot_results(metrics)
@@ -330,7 +291,7 @@ def parse_arguments():
         "--hidden_dims",
         type=int,
         nargs="+",
-        default=[128, 128, 128],
+        default=[128],
         help="List of hidden dimensions for each layer (default: 3 layers with 128 units each)",
     )
     parser.add_argument("--dropout_rate", type=float, default=0.5, help="Dropout rate for the model")
