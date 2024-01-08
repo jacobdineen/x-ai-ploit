@@ -7,7 +7,25 @@ import re
 import time
 from datetime import date, datetime, timedelta
 
+import fasttext.util
 from dateutil.parser import parse as date_parser
+from joblib import dump, load
+
+
+def write_graph(graph, ft_model, graph_path, vectorizer_path) -> None:
+    logging.info(f"Writing graph structure to {graph_path}...")
+    dump(graph, graph_path)
+    logging.info(f"Writing fasttext model to {vectorizer_path}...")
+    ft_model.save_model(vectorizer_path)
+
+
+def load_graph(graph_path: str, vectorizer_path: str) -> None:
+    logging.info(f"Loading graph structure from {graph_path}...")
+    graph = load(graph_path)
+    # Load vectorizer
+    logging.info(f"Loading vectorizer from {vectorizer_path}...")
+    ft_model = fasttext.load_model(vectorizer_path)
+    return graph, ft_model
 
 
 def timer(func):

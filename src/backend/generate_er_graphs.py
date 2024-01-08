@@ -17,11 +17,12 @@ import networkx as nx
 import nltk
 import numpy as np
 import pandas as pd
-from joblib import dump, load
 from networkx.algorithms import bipartite
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
+
+from src.backend.utils.utils import write_graph
 
 log_format = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
@@ -294,18 +295,7 @@ class CVEGraphGenerator:
             logging.warning("Graph is not bipartite & will not be saved. Exiting...")
             sys.exit(1)
 
-    def write_graph(self, graph_path, vectorizer_path) -> None:
-        logging.info(f"Writing graph structure to {graph_path}...")
-        dump(self.graph, graph_path)
-        logging.info(f"Writing fasttext model to {vectorizer_path}...")
-        self.ft_model.save_model(vectorizer_path)
-
-    def load_graph(self, graph_path: str, vectorizer_path: str) -> None:
-        logging.info(f"Loading graph structure from {graph_path}...")
-        self.graph = load(graph_path)
-        # Load vectorizer
-        logging.info(f"Loading vectorizer from {vectorizer_path}...")
-        self.ft_model = fasttext.load_model(vectorizer_path)
+        return self.graph
 
 
 def main(read_path: str, output_dir: str, limit: int = None) -> None:
@@ -331,8 +321,7 @@ def main(read_path: str, output_dir: str, limit: int = None) -> None:
         generator = CVEGraphGenerator(read_path, limit=limit)
         df = generator.read_and_preprocess()
         generator.create_graph(df)
-        generator.write_graph(graph_save_path, vectorizer_path)
-        generator.load_graph(graph_save_path, vectorizer_path)
+        write_graph(generator.graph, generator.ft_model, graph_save_path, vectorizer_path)
         logging.info(f"Graph, features and vectorizer saved to {graph_save_path}")
     else:
         logging.info("paths exist.. skipping data gen")

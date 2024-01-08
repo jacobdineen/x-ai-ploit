@@ -1,32 +1,31 @@
-# -*- coding: utf-8 -*-
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 
 class GCN(torch.nn.Module):
-    def __init__(self, num_features, hidden_dims, dropout_rate=0.5):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
         super().__init__()
-        self.layers = torch.nn.ModuleList()
-        prev_dim = num_features
+        self.convs = torch.nn.ModuleList()
+        self.convs.append(GCNConv(in_channels, hidden_channels))
 
-        for hidden_dim in hidden_dims:
-            self.layers.append(GCNConv(prev_dim, hidden_dim))
-            prev_dim = hidden_dim
+        for _ in range(num_layers - 2):
+            self.convs.append(GCNConv(hidden_channels, hidden_channels))
 
-        self.dropout_rate = dropout_rate
+        self.convs.append(GCNConv(hidden_channels, out_channels))
+        self.dropout = dropout
 
-    @torch.compile()
-    def forward(self, x, edge_index):
-        for i, layer in enumerate(self.layers):
-            x = layer(x, edge_index)
-            if i < len(self.layers) - 1:  # No activation and dropout on the last layer
-                x = F.relu(x)
-                x = F.dropout(x, p=self.dropout_rate, training=self.training)
+    def encode(self, x, edge_index):
+        for conv in self.convs[:-1]:
+            x = conv(x, edge_index)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.convs[-1](x, edge_index)
         return x
 
-    @torch.compile()
-    def decode(self, z, pos_edge_index, neg_edge_index):
-        edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=-1)
-        logits = (z[edge_index[0]] * z[edge_index[1]]).sum(dim=-1)
-        return logits
+    def decode(self, z, edge_label_index):
+        return (z[edge_label_index[0]] * z[edge_label_index[1]]).sum(dim=-1)
+
+    def decode_all(self, z):
+        prob_adj = z @ z.t()
+        return (prob_adj > 0).nonzero(as_tuple=False).t()
